@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import cv2
-from datetime import datetime
 import re as regex
 import sys
 
@@ -14,13 +13,13 @@ class Recording:
         self.sortkey     = alphanumeric(meta[1]).lower()
         self.title       = meta[1].strip()
         self.description = remove_prefix(meta[2].strip(), self.title).strip()
-        self.timestamp   = datetime.fromtimestamp(int(meta[3]))
+        self.timestamp   = path.split(" ")[1]
 #       self.length      = int(int(meta[5].strip()) // 90_000)
         self.hd          = "hd" in self.channel.lower()
 #       self.resolution  = get_video_metadata(path)
 
     def __repr__(self):
-        return f"{self.timestamp.strftime('%H:%M')} | {self.channel[:8].ljust(8)} | {self.title[:43].ljust(43)} | {self.description[:73]}"
+        return f"{self.timestamp[:2]}:{self.timestamp[2:]} | {self.channel[:8].ljust(8)} | {self.title[:43].ljust(43)} | {self.description[:73]}"
 
 def alphanumeric(line: str) -> str:
     return regex.sub("[^A-Za-z0-9]+", "", line)
@@ -54,7 +53,8 @@ def main(argc: int, argv: list[str]) -> None:
         except EOFError:
             break
 
-    recordings.sort(key=lambda r: r.sortkey)
+    print("Start sorting")
+    recordings.sort(key=lambda r: (r.sortkey, r.timestamp))
 
     padding = len(str(len(recordings)))
     for i, r in enumerate(recordings):
