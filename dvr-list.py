@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import cv2
+import PySimpleGUI as sg
 import re as regex
 import sys
 
@@ -55,10 +56,24 @@ def main(argc: int, argv: list[str]) -> None:
 
     print("Start sorting")
     recordings.sort(key=lambda r: (r.sortkey, r.timestamp))
+    print("Finished sorting")
+
+    listbox_items = []
 
     padding = len(str(len(recordings)))
     for i, r in enumerate(recordings):
-        print(f"{str(i).rjust(padding)} | {r}")
+        listbox_items.append(f"{str(i).rjust(padding)} | {r}")
+
+    gui_layout = [[sg.Listbox(listbox_items, size=(1280, 720))]]
+    window = sg.Window(title="dvr duplicates",
+                       layout=gui_layout,
+                       size=(1280, 720),
+                       finalize=True)
+
+    while True:
+        event, _ = window.read()
+        if event == sg.WIN_CLOSED:
+            quit()
 
 if __name__ == "__main__":
     main(len(sys.argv), sys.argv)
