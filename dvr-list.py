@@ -1,29 +1,31 @@
 #!/usr/bin/env python3
 
-import cv2
+import glob
 import PySimpleGUI as sg
-import re as regex
+import os
+import re
 import sys
+
+E2_VIDEO_EXTENSION = ".ts"
+E2_EXTENSIONS = [".eit", ".ts", ".ts.ap", ".ts.cuts", ".ts.meta", ".ts.sc"]
 
 recordings = []
 
 class Recording:
-    def __init__(self, path: str, meta: str):
-        self.basepath    = path.strip()
+    def __init__(self, basepath: str, meta: str):
+        self.basepath    = basepath.strip()
         self.channel     = meta[0].split(":")[-1].strip()
         self.title       = meta[1].strip()
         self.description = remove_prefix(meta[2].strip(), self.title).strip()
-        self.timestamp   = path.split(" ")[1]
-#       self.length      = int(int(meta[5].strip()) // 90_000)
+        self.timestamp   = basepath.split(" ")[1]
         self.hd          = "hd" in self.channel.lower()
-#       self.resolution  = get_video_metadata(path)
         self.sortkey     = alphanumeric(meta[1] + self.timestamp).lower()
 
     def __repr__(self) -> str:
         return f"{self.timestamp[:2]}:{self.timestamp[2:]} | {self.channel[:8].ljust(8)} | {self.title[:43].ljust(43)} | {self.description[:73]}"
 
 def alphanumeric(line: str) -> str:
-    return regex.sub("[^A-Za-z0-9]+", "", line)
+    return re.sub("[^A-Za-z0-9]+", "", line)
 
 def format_length(raw: int) -> str:
     hours   = raw // 3_600
@@ -34,35 +36,40 @@ def format_length(raw: int) -> str:
     return f"{hours}:{minutes:02d}:{seconds:02d}"
 
 def remove_prefix(line: str, prefix: str) -> str:
-    return regex.sub(r'^{0}'.format(regex.escape(prefix)), '', line)
+    return re.sub(r'^{0}'.format(re.escape(prefix)), '', line)
 
-def get_video_metadata(path: str) -> str:
-    vid     = cv2.VideoCapture(path)
-#   fps     = int(vid.get(cv2.CAP_PROP_FPS))
-    quality = int(vid.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    return f"{quality}{'p' if quality == 720 else 'i'}".rjust(5)
+def drop_recording(rec: Recording) -> None:
+    for e in E2_EXTENSIONS:
+        filepath = rec.basepath + e
+        print(f"Move: {filepath}")
 
 def main(argc: int, argv: list[str]) -> None:
-    print("Waiting for *.ts file paths or EOF...")
-    while True:
-        try:
-            path = input()
-            with open(path + ".meta") as file:
-                recordings.append(Recording(path, file.readlines()))
-        except FileNotFoundError:
-            continue
-        except EOFError:
-            break
+    if argc < 2:
+        raise IndexError(f"Usage: {argv[0]} <dir path> [dir path ...]")
 
-    print("Finished reading. Start sorting.")
+    print("Reading directories...")
+    filenames = []
+    for d in argv[1:]:
+        filenames += glob.glob(d + "/*" + E2_VIDEO_EXTENSION)
+    print("Reading meta files...")
+    for f in filenames:
+        with open(f + ".meta") as m:
+            recordings.append(Recording(re.sub("\.ts$", "", f), m.readlines()))
+
+    print(f"Successfully read {len(filenames)} meta files.")
+    print("Sorting...")
     recordings.sort(key=lambda r: r.sortkey)
     print("Finished sorting.")
 
-    gui_layout = [[sg.Listbox(key="listbox",
+    gui_layout = [[sg.Text("Please select an item...", key="text",
+                          font=("JetBrains Mono", 14)), sg.Button("Select", key="selectBtn"), sg.Push(), sg.Button("Drop", key="dropBtn")],
+                  [sg.Listbox(key="listbox",
                               values=recordings,
                               size=(1280, 720),
                               font=("JetBrains Mono", 14),
-                              enable_events=True,
+                              enable_events=False,
+                              bind_return_key=True,
+                              select_mode=sg.LISTBOX_SELECT_MODE_EXTENDED
                               )]]
     window = sg.Window(title="dvr duplicates",
                        layout=gui_layout,
@@ -70,12 +77,31 @@ def main(argc: int, argv: list[str]) -> None:
                        finalize=True)
 #   window.Maximize()
 
+    selected_for_drop = set()
+    listbox_selected_rec = []
+    listbox_selected_idx = []
     while True:
         event, _ = window.read()
+
         if event == sg.WIN_CLOSED:
             quit()
-        else:
-            print(window["listbox"].get()[0].basepath)
+
+        listbox_selected_rec = window["listbox"].get()
+        listbox_selected_idx = window["listbox"].get_indexes()
+
+        if event in ("selectBtn", "listbox") and len(listbox_selected_rec) > 0:
+            for i, r in enumerate(listbox_selected_rec):
+                window["listbox"].widget.itemconfig(listbox_selected_idx[i], fg='red', bg='white')
+                selected_for_drop.add(r)
+
+        if event == "dropBtn" and len(listbox_selected_rec) > 0:
+            drop_recording(r) #TODO
+            recordings.remove(r)
+            window["listbox"].update(recordings)
+
+        window["text"].update(str(len(selected_for_drop)) + " item(s) selected")
+
+
 
 if __name__ == "__main__":
     main(len(sys.argv), sys.argv)
