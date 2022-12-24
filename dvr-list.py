@@ -20,6 +20,7 @@ class Recording:
         self.timestamp   = basepath.split(" ")[1]
         self.hd          = "hd" in self.channel.lower()
         self.sortkey     = alphanumeric(meta[1] + self.timestamp).lower()
+        self.selected    = False
 
     def __repr__(self) -> str:
         return f"{self.timestamp[:2]}:{self.timestamp[2:]} | {self.channel[:8].ljust(8)} | {self.title[:43].ljust(43)} | {self.description}"
@@ -63,10 +64,9 @@ def main(argc: int, argv: list[str]) -> None:
 
     sg.ChangeLookAndFeel("Dark Black")
 
-    gui_layout = [[sg.Text("Please select an item...", key="selectionText",
+    gui_layout = [[sg.Text("Please select an item...", key="selectionTxt",
                           font=("JetBrains Mono", 14)),
-                   sg.Button("Select", key="selectBtn"),
-                   sg.Button("Unselect", key="unselectBtn"),
+                   sg.Button("Toggle Selection", key="selectionBtn"),
                    sg.Push(), sg.Button("Drop", key="dropBtn")],
                   [sg.Listbox(key="listbox",
                               values=recordings,
@@ -83,10 +83,9 @@ def main(argc: int, argv: list[str]) -> None:
                        resizable=True,
                        finalize=True)
 
-    window['listbox'].widget.config(bg="black", fg="white")
+    window['listbox'].widget.config(fg="white", bg="black")
 #   window.Maximize()
 
-    selected_for_drop = set()
     listbox_selected_rec = []
     listbox_selected_idx = []
     while True:
@@ -98,22 +97,24 @@ def main(argc: int, argv: list[str]) -> None:
         listbox_selected_rec = window["listbox"].get()
         listbox_selected_idx = window["listbox"].get_indexes()
 
-        if event in ("selectBtn", "listbox") and len(listbox_selected_rec) > 0:
+        if event in ("selectionBtn", "listbox") and len(listbox_selected_rec) > 0:
             for i, r in enumerate(listbox_selected_rec):
-                window["listbox"].widget.itemconfig(listbox_selected_idx[i], fg='black', bg='red')
-                selected_for_drop.add(r)
-
-        if event == "unselectBtn" and len(listbox_selected_rec) > 0:
-            for i, r in enumerate(listbox_selected_rec):
-                window["listbox"].widget.itemconfig(listbox_selected_idx[i], fg='white', bg='black')
-                selected_for_drop.remove(r)
+                colors = ("white", "black") if r.selected else ("black", "red")
+                window["listbox"].widget.itemconfig(listbox_selected_idx[i], fg=colors[0], bg=colors[1])
+                r.selected = not r.selected
 
         if event == "dropBtn" and len(listbox_selected_rec) > 0:
-            drop_recording(r) #TODO
-            recordings.remove(r)
+            for_deletion = set()
+            for r in recordings:
+                if not r.selected:
+                    continue
+                drop_recording(r) #TODO
+                for_deletion.add(r)
+            for r in for_deletion:
+                recordings.remove(r)
             window["listbox"].update(recordings)
 
-        window["selectionText"].update(str(len(selected_for_drop)) + " item(s) selected")
+        window["selectionTxt"].update(str(len([True for r in recordings if r.selected])) + " item(s) selected")
 
 
 
