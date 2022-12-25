@@ -4,12 +4,15 @@ import glob
 import PySimpleGUI as sg
 import os
 import re
+import subprocess
 import sys
 
 # Enigma 2 video file extension (default: ".ts")
 E2_VIDEO_EXTENSION = ".ts"
 # As far as I know there are six files associated to each recording
 E2_EXTENSIONS = [".eit", ".ts", ".ts.ap", ".ts.cuts", ".ts.meta", ".ts.sc"]
+
+recordings = []
 
 class Recording:
     def __init__(self, basepath: str, meta: str):
@@ -25,7 +28,8 @@ class Recording:
         self.hd          = "hd" in self.channel.lower()
         self.sortkey     = alphanumeric(self.title + self.timestamp).lower()
         self.rec_size    = os.stat(basepath + E2_VIDEO_EXTENSION).st_size
-        self.selected    = False
+        self.drop        = False
+        self.good        = False
 
 
     def __repr__(self) -> str:
@@ -51,20 +55,19 @@ def init_gui() -> sg.Window:
 
     gui_layout = [[sg.Text("Please select an item...", key="selectionTxt",
                           font=("JetBrains Mono", 14)),
-                   sg.Button("Toggle Selection", key="selectionBtn"),
                    sg.Push(), sg.Button("Drop", key="dropBtn")],
+                  [sg.Text("Select for [D]rop, [U]nselect for drop | [O]pen in VLC | Mark as [G]ood, [B]ad (normal)",
+                           font=("JetBrains Mono", 14), text_color="grey")],
                   [sg.Listbox(key="listbox",
                               values=recordings,
                               size=(1280, 720),
                               font=("JetBrains Mono", 14),
-                              enable_events=False,
-                              bind_return_key=True,
-                              select_mode=sg.LISTBOX_SELECT_MODE_EXTENDED
-                              )]]
+                              select_mode=sg.LISTBOX_SELECT_MODE_EXTENDED)]]
 
-    return sg.Window(title="dvr duplicates",
+    return sg.Window(title="DVR Duplicates",
                      layout=gui_layout,
                      size=(1280, 720),
+                     return_keyboard_events=True,
                      resizable=True,
                      finalize=True)
 
@@ -80,8 +83,6 @@ def main(argc: int, argv: list[str]) -> None:
         filenames += glob.glob(path)
     print(f"Successfully scanned {argc - 1} directories.", file=sys.stderr)
 
-    recordings = []
-
     print("Reading meta files... (This may take a while)", file=sys.stderr)
     for i, f in enumerate(filenames):
         with open(f + ".meta") as m:
@@ -94,12 +95,13 @@ def main(argc: int, argv: list[str]) -> None:
     print("Finished sorting.", file=sys.stderr)
 
     window = init_gui()
-    window['listbox'].widget.config(fg="white", bg="black")
+    window["listbox"].widget.config(fg="white", bg="black")
 
     listbox_selected_rec = []
     listbox_selected_idx = []
     while True:
         event, _ = window.read()
+        print(event, file=sys.stderr)
 
         if event == sg.WIN_CLOSED:
             quit()
@@ -107,25 +109,59 @@ def main(argc: int, argv: list[str]) -> None:
         listbox_selected_rec = window["listbox"].get()
         listbox_selected_idx = window["listbox"].get_indexes()
 
-        if event in ("selectionBtn", "listbox") and len(listbox_selected_rec) > 0:
+        # Select for [D]rop
+        if event == "d:40" and len(listbox_selected_rec) > 0:
             for i, r in enumerate(listbox_selected_rec):
-                colors = ("white", "black") if r.selected else ("black", "red")
-                window["listbox"].widget.itemconfig(listbox_selected_idx[i], fg=colors[0], bg=colors[1])
-                r.selected = not r.selected
+                if r.good: # Show warning?
+                    continue
+                window["listbox"].widget.itemconfig(listbox_selected_idx[i], fg="black", bg="red")
+                r.drop = True
 
+        # [U]nselect for drop
+        if event == "u:30" and len(listbox_selected_rec) > 0:
+            for i, r in enumerate(listbox_selected_rec):
+                if r.drop:
+                    window["listbox"].widget.itemconfig(listbox_selected_idx[i], fg="white", bg="black")
+                    r.drop = False
+
+        # [O]pen recording using VLC
+        if event == "o:32" and len(listbox_selected_rec) > 0:
+            subprocess.Popen(["/usr/bin/env", "vlc", listbox_selected_rec[0].basepath + E2_VIDEO_EXTENSION])
+
+        # Mark recording as [G]ood
+        if event == "g:42" and len(listbox_selected_rec) > 0:
+            for i, r in enumerate(listbox_selected_rec):
+                if r.drop: # Show warning?
+                    continue
+                window["listbox"].widget.itemconfig(listbox_selected_idx[i], fg="black", bg="light green")
+                r.drop = False
+                r.good = True
+
+        # Mark recording as [B]ad (normal)
+        if event == "b:56" and len(listbox_selected_rec) > 0:
+            for i, r in enumerate(listbox_selected_rec):
+                if r.good:
+                    window["listbox"].widget.itemconfig(listbox_selected_idx[i], fg="white", bg="black")
+                    r.good = False
+
+        selected_recodings = [r for r in recordings if r.drop]
+
+        # Drop button pressed
         if event == "dropBtn":
             for_deletion = set()
-            for r in recordings:
-                if not r.selected:
-                    continue
+            for r in selected_recodings:
                 drop_recording(r)
                 for_deletion.add(r)
             for r in for_deletion:
                 recordings.remove(r)
+                selected_recodings.remove(r)
             window["listbox"].update(recordings)
+            for i, r in enumerate(recordings):
+                if r.good:
+                    window["listbox"].widget.itemconfig(i, fg="black", bg="light green")
 
-        selected_recodings = [r for r in recordings if r.selected]
-        window["selectionTxt"].update(f"{len(selected_recodings)} item(s) selected (approx. {to_GiB(sum([r.rec_size for r in selected_recodings])):.1f} GiB)")
+
+        window["selectionTxt"].update(f"{len(selected_recodings)} item(s) (approx. {to_GiB(sum([r.rec_size for r in selected_recodings])):.1f} GiB) selected for drop")
 
 if __name__ == "__main__":
     main(len(sys.argv), sys.argv)
