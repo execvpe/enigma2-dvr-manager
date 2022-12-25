@@ -29,13 +29,16 @@ class Recording:
 
 
     def __repr__(self) -> str:
-        return f"{self.timestamp[:2]}:{self.timestamp[2:]} | {(self.rec_size // 1_073_741_824):2d}GB | {self.channel[:10].ljust(10)} | {self.title[:42].ljust(42)} | {self.description}"
+        return f"{self.timestamp[:2]}:{self.timestamp[2:]} | {(to_GiB(self.rec_size)):4.1f} GiB | {self.channel[:10].ljust(10)} | {self.title[:42].ljust(42)} | {self.description}"
 
 def alphanumeric(line: str) -> str:
     return re.sub("[^A-Za-z0-9]+", "", line)
 
 def remove_prefix(line: str, prefix: str) -> str:
     return re.sub(r'^{0}'.format(re.escape(prefix)), '', line)
+
+def to_GiB(size: int) -> float:
+    return size / 1_073_741_824
 
 def drop_recording(rec: Recording) -> None:
     for e in E2_EXTENSIONS:
@@ -106,7 +109,7 @@ def main(argc: int, argv: list[str]) -> None:
                 window["listbox"].widget.itemconfig(listbox_selected_idx[i], fg=colors[0], bg=colors[1])
                 r.selected = not r.selected
 
-        if event == "dropBtn" and len(listbox_selected_rec) > 0:
+        if event == "dropBtn":
             for_deletion = set()
             for r in recordings:
                 if not r.selected:
@@ -117,7 +120,8 @@ def main(argc: int, argv: list[str]) -> None:
                 recordings.remove(r)
             window["listbox"].update(recordings)
 
-        window["selectionTxt"].update(str(len([True for r in recordings if r.selected])) + " item(s) selected")
+        selected_recodings = [r for r in recordings if r.selected]
+        window["selectionTxt"].update(f"{len(selected_recodings)} item(s) selected (approx. {to_GiB(sum([r.rec_size for r in selected_recodings])):.1f} GiB)")
 
 
 
