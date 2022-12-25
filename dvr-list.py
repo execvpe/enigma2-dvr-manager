@@ -11,6 +11,8 @@ import sys
 E2_VIDEO_EXTENSION = ".ts"
 # As far as I know there are six files associated to each recording
 E2_EXTENSIONS = [".eit", ".ts", ".ts.ap", ".ts.cuts", ".ts.meta", ".ts.sc"]
+# Custom metadata file extension used by this software
+DUP_META_EXTENSION = ".dupmeta"
 
 recordings = []
 
@@ -29,7 +31,7 @@ class Recording:
         self.sortkey     = alphanumeric(self.title + self.timestamp).lower()
         self.rec_size    = os.stat(basepath + E2_VIDEO_EXTENSION).st_size
         self.drop        = False
-        self.good        = False
+        self.good        = load_good(basepath)
 
 
     def __repr__(self) -> str:
@@ -49,6 +51,21 @@ def drop_recording(rec: Recording) -> None:
     for e in E2_EXTENSIONS:
         filepath = rec.basepath + e
         print(filepath)
+
+def load_good(basepath: str) -> bool:
+    if not os.path.exists(basepath + DUP_META_EXTENSION):
+        return False
+    with open(basepath + DUP_META_EXTENSION, "r", encoding="utf-8") as f:
+        return f.readline().strip() == "good=True"
+
+def save_good(basepath: str, good=True) -> None:
+    with open(basepath + DUP_META_EXTENSION, "w", encoding="utf-8") as f:
+        f.write(f"good={good}\n")
+
+def recolor_gui(window: sg.Window) -> None:
+    for i, r in enumerate(recordings):
+        if r.good:
+            window["listbox"].widget.itemconfig(i, fg="black", bg="light green")
 
 def init_gui() -> sg.Window:
     sg.ChangeLookAndFeel("Dark Black")
@@ -85,7 +102,7 @@ def main(argc: int, argv: list[str]) -> None:
 
     print("Reading meta files... (This may take a while)", file=sys.stderr)
     for i, f in enumerate(filenames):
-        with open(f + ".meta") as m:
+        with open(f + ".meta", "r", encoding="utf-8") as m:
             print(f"Scanning meta file {i} of {len(filenames)}", end="\r", file=sys.stderr)
             recordings.append(Recording(re.sub("\.ts$", "", f), m.readlines()))
     print(f"Successfully read {len(filenames)} meta files.", file=sys.stderr)
@@ -96,6 +113,7 @@ def main(argc: int, argv: list[str]) -> None:
 
     window = init_gui()
     window["listbox"].widget.config(fg="white", bg="black")
+    recolor_gui(window)
 
     listbox_selected_rec = []
     listbox_selected_idx = []
@@ -133,6 +151,7 @@ def main(argc: int, argv: list[str]) -> None:
             for i, r in enumerate(listbox_selected_rec):
                 if r.drop: # Show warning?
                     continue
+                save_good(r.basepath)
                 window["listbox"].widget.itemconfig(listbox_selected_idx[i], fg="black", bg="light green")
                 r.drop = False
                 r.good = True
@@ -141,6 +160,7 @@ def main(argc: int, argv: list[str]) -> None:
         if event == "b:56" and len(listbox_selected_rec) > 0:
             for i, r in enumerate(listbox_selected_rec):
                 if r.good:
+                    save_good(r.basepath, good=False)
                     window["listbox"].widget.itemconfig(listbox_selected_idx[i], fg="white", bg="black")
                     r.good = False
 
@@ -156,10 +176,7 @@ def main(argc: int, argv: list[str]) -> None:
                 recordings.remove(r)
                 selected_recodings.remove(r)
             window["listbox"].update(recordings)
-            for i, r in enumerate(recordings):
-                if r.good:
-                    window["listbox"].widget.itemconfig(i, fg="black", bg="light green")
-
+            recolor_gui(window)
 
         window["selectionTxt"].update(f"{len(selected_recodings)} item(s) (approx. {to_GiB(sum([r.rec_size for r in selected_recodings])):.1f} GiB) selected for drop")
 
