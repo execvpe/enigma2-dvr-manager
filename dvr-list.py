@@ -30,8 +30,11 @@ class Recording:
         self.hd          = "hd" in self.channel.lower()
         self.sortkey     = alphanumeric(self.title + self.timestamp).lower()
         self.rec_size    = os.stat(basepath + E2_VIDEO_EXTENSION).st_size
-        self.drop        = False
-        self.good        = load_good(basepath)
+
+        dupmeta = load_dupmeta(self)
+
+        self.drop        = dupmeta.get("drop", "False") == "True"
+        self.good        = dupmeta.get("good", "False") == "True"
 
 
     def __repr__(self) -> str:
@@ -48,24 +51,31 @@ def to_GiB(size: int) -> float:
     return size / 1_073_741_824
 
 def drop_recording(rec: Recording) -> None:
-    for e in E2_EXTENSIONS:
+    for e in E2_EXTENSIONS + [DUP_META_EXTENSION]:
         filepath = rec.basepath + e
         print(filepath)
 
-def load_good(basepath: str) -> bool:
-    if not os.path.exists(basepath + DUP_META_EXTENSION):
-        return False
-    with open(basepath + DUP_META_EXTENSION, "r", encoding="utf-8") as f:
-        return f.readline().strip() == "good=True"
+def load_dupmeta(rec: Recording) -> dict[str, str]:
+    if not os.path.exists(rec.basepath + DUP_META_EXTENSION):
+        return dict()
+    with open(rec.basepath + DUP_META_EXTENSION, "r", encoding="utf-8") as f:
+        return dict([x.strip().split("=") for x in f.readlines()])
 
-def save_good(basepath: str, good=True) -> None:
-    with open(basepath + DUP_META_EXTENSION, "w", encoding="utf-8") as f:
-        f.write(f"good={good}\n")
+def save_dupmeta(rec: Recording) -> None:
+    with open(rec.basepath + DUP_META_EXTENSION, "w", encoding="utf-8") as f:
+        f.write(f"good={rec.good}\ndrop={rec.drop}\n")
 
 def recolor_gui(window: sg.Window) -> None:
     for i, r in enumerate(recordings):
         if r.good:
             window["listbox"].widget.itemconfig(i, fg="black", bg="light green")
+            return
+
+        if r.drop:
+            window["listbox"].widget.itemconfig(i, fg="black", bg="red")
+            return
+
+        window["listbox"].widget.itemconfig(i, fg="white", bg="black")
 
 def init_gui() -> sg.Window:
     sg.ChangeLookAndFeel("Dark Black")
@@ -113,11 +123,10 @@ def main(argc: int, argv: list[str]) -> None:
 
     window = init_gui()
     window["listbox"].widget.config(fg="white", bg="black")
-    recolor_gui(window)
 
     listbox_selected_rec = []
-    listbox_selected_idx = []
     while True:
+        recolor_gui(window)
         event, _ = window.read()
         print(event, file=sys.stderr)
 
@@ -125,22 +134,20 @@ def main(argc: int, argv: list[str]) -> None:
             quit()
 
         listbox_selected_rec = window["listbox"].get()
-        listbox_selected_idx = window["listbox"].get_indexes()
 
         # Select for [D]rop
         if event == "d:40" and len(listbox_selected_rec) > 0:
             for i, r in enumerate(listbox_selected_rec):
                 if r.good: # Show warning?
                     continue
-                window["listbox"].widget.itemconfig(listbox_selected_idx[i], fg="black", bg="red")
                 r.drop = True
+                save_dupmeta(r)
 
         # [U]nselect for drop
         if event == "u:30" and len(listbox_selected_rec) > 0:
             for i, r in enumerate(listbox_selected_rec):
-                if r.drop:
-                    window["listbox"].widget.itemconfig(listbox_selected_idx[i], fg="white", bg="black")
-                    r.drop = False
+                r.drop = False
+                save_dupmeta(r)
 
         # [O]pen recording using VLC
         if event == "o:32" and len(listbox_selected_rec) > 0:
@@ -151,18 +158,15 @@ def main(argc: int, argv: list[str]) -> None:
             for i, r in enumerate(listbox_selected_rec):
                 if r.drop: # Show warning?
                     continue
-                save_good(r.basepath)
-                window["listbox"].widget.itemconfig(listbox_selected_idx[i], fg="black", bg="light green")
                 r.drop = False
                 r.good = True
+                save_dupmeta(r)
 
         # Mark recording as [B]ad (normal)
         if event == "b:56" and len(listbox_selected_rec) > 0:
             for i, r in enumerate(listbox_selected_rec):
-                if r.good:
-                    save_good(r.basepath, good=False)
-                    window["listbox"].widget.itemconfig(listbox_selected_idx[i], fg="white", bg="black")
-                    r.good = False
+                r.good = False
+                save_dupmeta(r)
 
         selected_recodings = [r for r in recordings if r.drop]
 
@@ -178,7 +182,9 @@ def main(argc: int, argv: list[str]) -> None:
             window["listbox"].update(recordings)
             recolor_gui(window)
 
-        window["selectionTxt"].update(f"{len(selected_recodings)} item(s) (approx. {to_GiB(sum([r.rec_size for r in selected_recodings])):.1f} GiB) selected for drop")
+        good_recodings = [r for r in recordings if r.good]
+
+        window["selectionTxt"].update(f"{len(selected_recodings)} item(s) (approx. {to_GiB(sum([r.rec_size for r in selected_recodings])):.1f} GiB) selected for drop | {len(good_recodings)} recordings good | {len(recordings)} total")
 
 if __name__ == "__main__":
     main(len(sys.argv), sys.argv)
