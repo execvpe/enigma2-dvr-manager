@@ -16,25 +16,23 @@ class Recording:
         self.basepath    = basepath.strip()
         self.channel     = meta[0].split(":")[-1].strip()
         self.title       = meta[1].strip()
+
+        if len(self.title) == 0:
+            self.title = "[?] " + self.basepath.split(" - ")[2]
+
         self.description = remove_prefix(meta[2].strip(), self.title).strip()
-        self.timestamp   = basepath.split(" ")[1]
+        self.timestamp   = self.basepath.split(" ")[1]
         self.hd          = "hd" in self.channel.lower()
-        self.sortkey     = alphanumeric(meta[1] + self.timestamp).lower()
+        self.sortkey     = alphanumeric(self.title + self.timestamp).lower()
+        self.rec_size    = os.stat(basepath + E2_VIDEO_EXTENSION).st_size
         self.selected    = False
 
+
     def __repr__(self) -> str:
-        return f"{self.timestamp[:2]}:{self.timestamp[2:]} | {self.channel[:8].ljust(8)} | {self.title[:43].ljust(43)} | {self.description}"
+        return f"{self.timestamp[:2]}:{self.timestamp[2:]} | {(self.rec_size // 1_073_741_824):2d}GB | {self.channel[:10].ljust(10)} | {self.title[:42].ljust(42)} | {self.description}"
 
 def alphanumeric(line: str) -> str:
     return re.sub("[^A-Za-z0-9]+", "", line)
-
-def format_length(raw: int) -> str:
-    hours   = raw // 3_600
-    raw -= hours * 3_600
-    minutes = raw // 60
-    raw -= minutes * 60
-    seconds = raw
-    return f"{hours}:{minutes:02d}:{seconds:02d}"
 
 def remove_prefix(line: str, prefix: str) -> str:
     return re.sub(r'^{0}'.format(re.escape(prefix)), '', line)
@@ -42,25 +40,30 @@ def remove_prefix(line: str, prefix: str) -> str:
 def drop_recording(rec: Recording) -> None:
     for e in E2_EXTENSIONS:
         filepath = rec.basepath + e
-        print(f"Move: {filepath}")
+        print(filepath)
 
 def main(argc: int, argv: list[str]) -> None:
     if argc < 2:
         raise IndexError(f"Usage: {argv[0]} <dir path> [dir path ...]")
 
-    print("Reading directories...")
+    print("Scanning directories...", file=sys.stderr)
     filenames = []
     for d in argv[1:]:
-        filenames += glob.glob(d + "/*" + E2_VIDEO_EXTENSION)
-    print("Reading meta files...")
-    for f in filenames:
-        with open(f + ".meta") as m:
-            recordings.append(Recording(re.sub("\.ts$", "", f), m.readlines()))
+        path = d + "/*" + E2_VIDEO_EXTENSION
+        print(f"Scanning directory: {path}", end="\r", file=sys.stderr)
+        filenames += glob.glob(path)
+    print(f"Successfully scanned {argc - 1} directories.", file=sys.stderr)
 
-    print(f"Successfully read {len(filenames)} meta files.")
-    print("Sorting...")
+    print("Reading meta files... (This may take a while)", file=sys.stderr)
+    for i, f in enumerate(filenames):
+        with open(f + ".meta") as m:
+            print(f"Scanning meta file {i} of {len(filenames)}", end="\r", file=sys.stderr)
+            recordings.append(Recording(re.sub("\.ts$", "", f), m.readlines()))
+    print(f"Successfully read {len(filenames)} meta files.", file=sys.stderr)
+
+    print("Sorting...", file=sys.stderr)
     recordings.sort(key=lambda r: r.sortkey)
-    print("Finished sorting.")
+    print("Finished sorting.", file=sys.stderr)
 
     sg.ChangeLookAndFeel("Dark Black")
 
@@ -108,7 +111,7 @@ def main(argc: int, argv: list[str]) -> None:
             for r in recordings:
                 if not r.selected:
                     continue
-                drop_recording(r) #TODO
+                drop_recording(r)
                 for_deletion.add(r)
             for r in for_deletion:
                 recordings.remove(r)
