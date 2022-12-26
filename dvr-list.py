@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import cv2
 import glob
 import PySimpleGUI as sg
 import os
@@ -35,10 +36,14 @@ class Recording:
 
         self.drop        = dupmeta.get("drop", "False") == "True"
         self.good        = dupmeta.get("good", "False") == "True"
+        self.duration    = int(dupmeta.get("duration", "-2"))
 
+        if self.duration == -2:
+            self.duration = get_video_duration(self)
+            save_dupmeta(self)
 
     def __repr__(self) -> str:
-        return f"{self.timestamp[:2]}:{self.timestamp[2:]} | {(to_GiB(self.rec_size)):4.1f} GiB | {self.channel[:10].ljust(10)} | {self.title[:42].ljust(42)} | {self.description}"
+        return f"{self.timestamp[:2]}:{self.timestamp[2:]} | {(to_GiB(self.rec_size)):4.1f} GiB | {(self.duration // 60):3d} min | {self.channel[:10].ljust(10)} | {self.title[:42].ljust(42)} | {self.description}"
 
 # Remove everything that is not a letter or digit
 def alphanumeric(line: str) -> str:
@@ -62,18 +67,30 @@ def load_dupmeta(rec: Recording) -> dict[str, str]:
         return dict([x.strip().split("=") for x in f.readlines()])
 
 def save_dupmeta(rec: Recording) -> None:
+    assert not (rec.good and rec.drop)
     with open(rec.basepath + DUP_META_EXTENSION, "w", encoding="utf-8") as f:
-        f.write(f"good={rec.good}\ndrop={rec.drop}\n")
+        f.write(f"duration={rec.duration}\ngood={rec.good}\ndrop={rec.drop}\n")
+
+def get_video_duration(rec: Recording) -> int:
+    vid     = cv2.VideoCapture(rec.basepath + E2_VIDEO_EXTENSION)
+    fps     = int(vid.get(cv2.CAP_PROP_FPS))
+    frames  = int(vid.get(cv2.CAP_PROP_FRAME_COUNT))
+    vid.release()
+
+    if fps == 0:
+        return -1
+    return frames // fps
 
 def recolor_gui(window: sg.Window) -> None:
     for i, r in enumerate(recordings):
+        assert not (r.good and r.drop)
         if r.good:
             window["listbox"].widget.itemconfig(i, fg="black", bg="light green")
-            return
+            continue
 
         if r.drop:
             window["listbox"].widget.itemconfig(i, fg="black", bg="red")
-            return
+            continue
 
         window["listbox"].widget.itemconfig(i, fg="white", bg="black")
 
@@ -83,11 +100,12 @@ def init_gui() -> sg.Window:
     gui_layout = [[sg.Text("Please select an item...", key="selectionTxt",
                           font=("JetBrains Mono", 14)),
                    sg.Push(), sg.Button("Drop", key="dropBtn")],
-                  [sg.Text("Select for [D]rop, [U]nselect for drop | [O]pen in VLC | Mark as [G]ood, [B]ad (normal)",
+                  [sg.Text("[D]rop, [K]eep | [O]pen in VLC | Mark as [G]ood, [B]ad (normal)",
                            font=("JetBrains Mono", 14), text_color="grey")],
                   [sg.Listbox(key="listbox",
                               values=recordings,
                               size=(1280, 720),
+                              enable_events=True,
                               font=("JetBrains Mono", 14),
                               select_mode=sg.LISTBOX_SELECT_MODE_EXTENDED)]]
 
@@ -143,8 +161,8 @@ def main(argc: int, argv: list[str]) -> None:
                 r.drop = True
                 save_dupmeta(r)
 
-        # [U]nselect for drop
-        if event == "u:30" and len(listbox_selected_rec) > 0:
+        # [K]eep from Drop
+        if event == "k:45" and len(listbox_selected_rec) > 0:
             for i, r in enumerate(listbox_selected_rec):
                 r.drop = False
                 save_dupmeta(r)
