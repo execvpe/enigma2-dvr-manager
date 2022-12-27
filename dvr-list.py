@@ -16,6 +16,7 @@ E2_EXTENSIONS = [".eit", ".ts", ".ts.ap", ".ts.cuts", ".ts.meta", ".ts.sc"]
 DUP_META_EXTENSION = ".dupmeta"
 
 recordings = []
+window = None
 
 class Recording:
     def __init__(self, basepath: str, meta: str):
@@ -45,7 +46,7 @@ class Recording:
             save_dupmeta(self)
 
     def __getattributes(self) -> str:
-        return f"{'D' if self.drop else ' '}{'G' if self.good else ' '}{'M' if self.mastered else ' '}"
+        return f"{'D' if self.drop else '.'}{'G' if self.good else '.'}{'M' if self.mastered else '.'}"
 
     def __repr__(self) -> str:
         return f"{self.__getattributes()} | {self.timestamp[:2]}:{self.timestamp[2:]} | {(to_GiB(self.rec_size)):4.1f} GiB | {(self.duration // 60):3d} min | {self.channel[:10].ljust(10)} | {self.title[:42].ljust(42)} | {self.description}"
@@ -75,6 +76,15 @@ def save_dupmeta(rec: Recording) -> None:
     with open(rec.basepath + DUP_META_EXTENSION, "w", encoding="utf-8") as f:
         f.write(f"duration={rec.duration}\ngood={rec.good}\ndrop={rec.drop}\nmastered={rec.mastered}\n")
 
+def update_attribute(recs: list[Recording], check, update) -> None:
+    if len(recs) == 0:
+        return
+    for r in recs:
+        if check(r):
+            update(r)
+            update_listbox_item(r)
+            save_dupmeta(r)
+
 def get_video_duration(rec: Recording) -> int:
     vid     = cv2.VideoCapture(rec.basepath + E2_VIDEO_EXTENSION)
     fps     = int(vid.get(cv2.CAP_PROP_FPS))
@@ -84,6 +94,29 @@ def get_video_duration(rec: Recording) -> int:
     if fps == 0:
         return -1
     return frames // fps
+
+def init_gui() -> None:
+    sg.ChangeLookAndFeel("Dark Black")
+
+    gui_layout = [[sg.Text("Please select an item...", key="selectionTxt",
+                          font=("JetBrains Mono", 14)),
+                   sg.Push(), sg.Button("Drop", key="dropBtn")],
+                  [sg.Text("[D]rop, [K]eep | [O]pen in VLC | Mark as [G]ood, [B]ad (normal)",
+                           font=("JetBrains Mono", 14), text_color="grey")],
+                  [sg.Listbox(key="listbox",
+                              values=recordings,
+                              size=(1280, 720),
+                              enable_events=True,
+                              font=("JetBrains Mono", 14),
+                              select_mode=sg.LISTBOX_SELECT_MODE_EXTENDED)]]
+
+    global window
+    window = sg.Window(title="DVR Duplicates",
+                       layout=gui_layout,
+                       size=(1280, 720),
+                       return_keyboard_events=True,
+                       resizable=True,
+                       finalize=True)
 
 def recolor_gui(window: sg.Window) -> None:
     for i, r in enumerate(recordings):
@@ -101,27 +134,11 @@ def recolor_gui(window: sg.Window) -> None:
 
         window["listbox"].widget.itemconfig(i, fg="white", bg="black")
 
-def init_gui() -> sg.Window:
-    sg.ChangeLookAndFeel("Dark Black")
-
-    gui_layout = [[sg.Text("Please select an item...", key="selectionTxt",
-                          font=("JetBrains Mono", 14)),
-                   sg.Push(), sg.Button("Drop", key="dropBtn")],
-                  [sg.Text("[D]rop, [K]eep | [O]pen in VLC | Mark as [G]ood, [B]ad (normal)",
-                           font=("JetBrains Mono", 14), text_color="grey")],
-                  [sg.Listbox(key="listbox",
-                              values=recordings,
-                              size=(1280, 720),
-                              enable_events=True,
-                              font=("JetBrains Mono", 14),
-                              select_mode=sg.LISTBOX_SELECT_MODE_EXTENDED)]]
-
-    return sg.Window(title="DVR Duplicates",
-                     layout=gui_layout,
-                     size=(1280, 720),
-                     return_keyboard_events=True,
-                     resizable=True,
-                     finalize=True)
+def update_listbox_item(rec: Recording) -> None:
+    i = recordings.index(rec)
+    window["listbox"].widget.delete(i)
+    window["listbox"].widget.insert(i, rec)
+    window["listbox"].widget.selection_set(i)
 
 def main(argc: int, argv: list[str]) -> None:
     if argc < 2:
@@ -146,11 +163,15 @@ def main(argc: int, argv: list[str]) -> None:
     recordings.sort(key=lambda r: r.sortkey)
     print("Finished sorting.", file=sys.stderr)
 
-    window = init_gui()
+    init_gui()
     window["listbox"].widget.config(fg="white", bg="black")
 
-    listbox_selected_rec = []
     while True:
+        selected_recodings = [r for r in recordings if r.drop]
+        good_recodings = [r for r in recordings if r.good]
+
+        window["selectionTxt"].update(f"{len(selected_recodings)} item(s) (approx. {to_GiB(sum([r.rec_size for r in selected_recodings])):.1f} GiB) selected for drop | {len(good_recodings)} recordings good | {len(recordings)} total")
+
         recolor_gui(window)
         event, _ = window.read()
         print(event, file=sys.stderr)
@@ -160,51 +181,41 @@ def main(argc: int, argv: list[str]) -> None:
 
         listbox_selected_rec = window["listbox"].get()
 
-        # Select for [D]rop
-        if event == "d:40" and len(listbox_selected_rec) > 0:
-            for i, r in enumerate(listbox_selected_rec):
-                r.drop = True
-                save_dupmeta(r)
-
-        # [K]eep from Drop
-        if event == "k:45" and len(listbox_selected_rec) > 0:
-            for i, r in enumerate(listbox_selected_rec):
-                r.drop = False
-                save_dupmeta(r)
-
         # [O]pen recording using VLC
         if event == "o:32" and len(listbox_selected_rec) > 0:
             subprocess.Popen(["/usr/bin/env", "vlc", listbox_selected_rec[0].basepath + E2_VIDEO_EXTENSION])
+            continue
+
+        # Select for [D]rop
+        if event == "d:40":
+            update_attribute(listbox_selected_rec, lambda r: not r.drop, lambda r: setattr(r, "drop", True))
+            continue
+
+        # [K]eep from Drop
+        if event == "k:45":
+            update_attribute(listbox_selected_rec, lambda r: r.drop, lambda r: setattr(r, "drop", False))
+            continue
 
         # Mark recording as [G]ood
-        if event == "g:42" and len(listbox_selected_rec) > 0:
-            for i, r in enumerate(listbox_selected_rec):
-                r.drop = False
-                r.good = True
-                save_dupmeta(r)
+        if event == "g:42":
+            update_attribute(listbox_selected_rec, lambda r: not r.good, lambda r: setattr(r, "good", True))
+            continue
 
         # Mark recording as [B]ad (normal)
-        if event == "b:56" and len(listbox_selected_rec) > 0:
-            for i, r in enumerate(listbox_selected_rec):
-                r.good = False
-                save_dupmeta(r)
-
-        selected_recodings = [r for r in recordings if r.drop]
+        if event == "b:56":
+            update_attribute(listbox_selected_rec, lambda r: r.good, lambda r: setattr(r, "good", False))
+            continue
 
         # Drop button pressed
         if event == "dropBtn":
             for_deletion = set()
-            for r in selected_recodings:
+            for r in [x for x in recordings if r.drop]:
                 drop_recording(r)
                 for_deletion.add(r)
             for r in for_deletion:
                 recordings.remove(r)
-                selected_recodings.remove(r)
             window["listbox"].update(recordings)
 
-        good_recodings = [r for r in recordings if r.good]
-
-        window["selectionTxt"].update(f"{len(selected_recodings)} item(s) (approx. {to_GiB(sum([r.rec_size for r in selected_recodings])):.1f} GiB) selected for drop | {len(good_recodings)} recordings good | {len(recordings)} total")
 
 if __name__ == "__main__":
     main(len(sys.argv), sys.argv)
