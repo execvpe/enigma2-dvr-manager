@@ -27,7 +27,7 @@ class Recording:
             self.title = "[?] " + self.basepath.split(" - ")[2]
 
         self.description = remove_prefix(meta[2].strip(), self.title).strip()
-        self.timestamp   = self.basepath.split(" ")[1]
+        self.timestamp   = os.path.basename(self.basepath).split(" ")[1]
         self.hd          = "hd" in self.channel.lower()
         self.sortkey     = alphanumeric(self.title + self.timestamp).lower()
         self.rec_size    = os.stat(basepath + E2_VIDEO_EXTENSION).st_size
