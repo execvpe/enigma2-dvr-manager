@@ -28,9 +28,13 @@ class Recording:
             self.title = "[?] " + self.basepath.split(" - ")[2]
 
         self.description = remove_prefix(meta[2].strip(), self.title).strip()
-        self.timestamp   = os.path.basename(self.basepath).split(" ")[1]
-        self.hd          = "hd" in self.channel.lower()
-        self.sortkey     = alphanumeric(self.title + self.timestamp).lower()
+
+        basename   = os.path.basename(self.basepath).split(" ")
+
+        self.date        = f"{basename[0][:4]}-{basename[0][4:6]}-{basename[0][6:8]}"
+        self.time        = f"{basename[1][:2]}:{basename[1][2:4]}"
+        self.hd          = "HD" in self.channel.upper()
+        self.sortkey     = alphanumeric(f"{self.title}{self.time}").lower()
         self.rec_size    = os.stat(basepath + E2_VIDEO_EXTENSION).st_size
 
         dupmeta = load_dupmeta(self)
@@ -49,7 +53,7 @@ class Recording:
         return f"{'D' if self.drop else '.'}{'G' if self.good else '.'}{'M' if self.mastered else '.'}"
 
     def __repr__(self) -> str:
-        return f"{self.__getattributes()} | {self.timestamp[:2]}:{self.timestamp[2:]} | {(to_GiB(self.rec_size)):4.1f} GiB | {(self.duration // 60):3d} min | {self.channel[:10].ljust(10)} | {self.title[:42].ljust(42)} | {self.description}"
+        return f"{self.__getattributes()} | {self.date} {self.time} | {(to_GiB(self.rec_size)):4.1f} GiB | {(self.duration // 60):3d} min | {self.channel[:10].ljust(10)} | {self.title[:42].ljust(42)} | {self.description}"
 
 # Remove everything that is not a letter or digit
 def alphanumeric(line: str) -> str:
