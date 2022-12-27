@@ -144,18 +144,18 @@ def main(argc: int, argv: list[str]) -> None:
     if argc < 2:
         raise IndexError(f"Usage: {argv[0]} <dir path> [dir path ...]")
 
-    print("Scanning directories...", file=sys.stderr)
+    print("Scanning directories... (This may take a while)", file=sys.stderr)
     filenames = []
-    for d in argv[1:]:
+    for i, d in enumerate(argv[1:]):
         path = d + "/*" + E2_VIDEO_EXTENSION
-        print(f"Scanning directory: {path}", end="\r", file=sys.stderr)
+        print(f"Scanning directory: {i + 1} of {argc - 1}", end="\r", file=sys.stderr)
         filenames += glob.glob(path)
     print(f"Successfully scanned {argc - 1} directories.", file=sys.stderr)
 
     print("Reading meta files... (This may take a while)", file=sys.stderr)
     for i, f in enumerate(filenames):
         with open(f + ".meta", "r", encoding="utf-8") as m:
-            print(f"Scanning meta file {i} of {len(filenames)}", end="\r", file=sys.stderr)
+            print(f"Scanning meta file {i + 1} of {len(filenames)}", end="\r", file=sys.stderr)
             recordings.append(Recording(re.sub("\.ts$", "", f), m.readlines()))
     print(f"Successfully read {len(filenames)} meta files.", file=sys.stderr)
 
