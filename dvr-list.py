@@ -56,7 +56,7 @@ def alphanumeric(line: str) -> str:
     return re.sub("[^A-Za-z0-9]+", "", line)
 
 def remove_prefix(line: str, prefix: str) -> str:
-    return re.sub(r'^{0}'.format(re.escape(prefix)), '', line)
+    return re.sub(f"^{re.escape(prefix)}", "", line)
 
 def to_GiB(size: int) -> float:
     return size / 1_073_741_824
