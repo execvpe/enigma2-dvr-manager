@@ -38,16 +38,17 @@ class Recording:
         self.good        = dupmeta.get("good",     "False") == "True"
         self.mastered    = dupmeta.get("mastered", "False") == "True"
 
-        assert not (self.good and self.drop)
-
         self.duration    = int(dupmeta.get("duration", "-2"))
 
         if self.duration == -2:
             self.duration = get_video_duration(self)
             save_dupmeta(self)
 
+    def __getattributes(self) -> str:
+        return f"{'D' if self.drop else ' '}{'G' if self.good else ' '}{'M' if self.mastered else ' '}"
+
     def __repr__(self) -> str:
-        return f"{self.timestamp[:2]}:{self.timestamp[2:]} | {(to_GiB(self.rec_size)):4.1f} GiB | {(self.duration // 60):3d} min | {self.channel[:10].ljust(10)} | {self.title[:42].ljust(42)} | {self.description}"
+        return f"{self.__getattributes()} | {self.timestamp[:2]}:{self.timestamp[2:]} | {(to_GiB(self.rec_size)):4.1f} GiB | {(self.duration // 60):3d} min | {self.channel[:10].ljust(10)} | {self.title[:42].ljust(42)} | {self.description}"
 
 # Remove everything that is not a letter or digit
 def alphanumeric(line: str) -> str:
@@ -71,7 +72,6 @@ def load_dupmeta(rec: Recording) -> dict[str, str]:
         return dict([x.strip().split("=") for x in f.readlines()])
 
 def save_dupmeta(rec: Recording) -> None:
-    assert not (rec.good and rec.drop)
     with open(rec.basepath + DUP_META_EXTENSION, "w", encoding="utf-8") as f:
         f.write(f"duration={rec.duration}\ngood={rec.good}\ndrop={rec.drop}\nmastered={rec.mastered}\n")
 
@@ -87,16 +87,16 @@ def get_video_duration(rec: Recording) -> int:
 
 def recolor_gui(window: sg.Window) -> None:
     for i, r in enumerate(recordings):
+        if r.drop:
+            window["listbox"].widget.itemconfig(i, fg="black", bg="red")
+            continue
+
         if r.mastered:
             window["listbox"].widget.itemconfig(i, fg="white", bg="blue")
             continue
 
         if r.good:
             window["listbox"].widget.itemconfig(i, fg="black", bg="light green")
-            continue
-
-        if r.drop:
-            window["listbox"].widget.itemconfig(i, fg="black", bg="red")
             continue
 
         window["listbox"].widget.itemconfig(i, fg="white", bg="black")
@@ -163,8 +163,6 @@ def main(argc: int, argv: list[str]) -> None:
         # Select for [D]rop
         if event == "d:40" and len(listbox_selected_rec) > 0:
             for i, r in enumerate(listbox_selected_rec):
-                if r.good: # Show warning?
-                    continue
                 r.drop = True
                 save_dupmeta(r)
 
@@ -181,8 +179,6 @@ def main(argc: int, argv: list[str]) -> None:
         # Mark recording as [G]ood
         if event == "g:42" and len(listbox_selected_rec) > 0:
             for i, r in enumerate(listbox_selected_rec):
-                if r.drop: # Show warning?
-                    continue
                 r.drop = False
                 r.good = True
                 save_dupmeta(r)
@@ -205,7 +201,6 @@ def main(argc: int, argv: list[str]) -> None:
                 recordings.remove(r)
                 selected_recodings.remove(r)
             window["listbox"].update(recordings)
-            recolor_gui(window)
 
         good_recodings = [r for r in recordings if r.good]
 
