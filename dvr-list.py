@@ -34,8 +34,12 @@ class Recording:
 
         dupmeta = load_dupmeta(self)
 
-        self.drop        = dupmeta.get("drop", "False") == "True"
-        self.good        = dupmeta.get("good", "False") == "True"
+        self.drop        = dupmeta.get("drop",     "False") == "True"
+        self.good        = dupmeta.get("good",     "False") == "True"
+        self.mastered    = dupmeta.get("mastered", "False") == "True"
+
+        assert not (self.good and self.drop)
+
         self.duration    = int(dupmeta.get("duration", "-2"))
 
         if self.duration == -2:
@@ -69,7 +73,7 @@ def load_dupmeta(rec: Recording) -> dict[str, str]:
 def save_dupmeta(rec: Recording) -> None:
     assert not (rec.good and rec.drop)
     with open(rec.basepath + DUP_META_EXTENSION, "w", encoding="utf-8") as f:
-        f.write(f"duration={rec.duration}\ngood={rec.good}\ndrop={rec.drop}\n")
+        f.write(f"duration={rec.duration}\ngood={rec.good}\ndrop={rec.drop}\nmastered={rec.mastered}\n")
 
 def get_video_duration(rec: Recording) -> int:
     vid     = cv2.VideoCapture(rec.basepath + E2_VIDEO_EXTENSION)
@@ -83,7 +87,10 @@ def get_video_duration(rec: Recording) -> int:
 
 def recolor_gui(window: sg.Window) -> None:
     for i, r in enumerate(recordings):
-        assert not (r.good and r.drop)
+        if r.mastered:
+            window["listbox"].widget.itemconfig(i, fg="white", bg="blue")
+            continue
+
         if r.good:
             window["listbox"].widget.itemconfig(i, fg="black", bg="light green")
             continue
