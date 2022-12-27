@@ -64,7 +64,8 @@ def to_GiB(size: int) -> float:
 def drop_recording(rec: Recording) -> None:
     for e in E2_EXTENSIONS + [DUP_META_EXTENSION]:
         filepath = rec.basepath + e
-        print(filepath)
+        if os.path.exists(filepath):
+            print(filepath)
 
 def load_dupmeta(rec: Recording) -> dict[str, str]:
     if not os.path.exists(rec.basepath + DUP_META_EXTENSION):
@@ -209,7 +210,7 @@ def main(argc: int, argv: list[str]) -> None:
         # Drop button pressed
         if event == "dropBtn":
             for_deletion = set()
-            for r in [x for x in recordings if r.drop]:
+            for r in [x for x in recordings if x.drop]:
                 drop_recording(r)
                 for_deletion.add(r)
             for r in for_deletion:
