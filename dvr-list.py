@@ -15,6 +15,30 @@ E2_EXTENSIONS = [".eit", ".ts", ".ts.ap", ".ts.cuts", ".ts.meta", ".ts.sc"]
 # Custom metadata file extension used by this software
 DUP_META_EXTENSION = ".dupmeta"
 
+class Reason:
+    def __init__(self, key: str, desc: str):
+        self.key  = key
+        self.desc = desc
+
+    def __repr__(self) -> str:
+        return self.desc
+
+DROP_REASONS = [
+    Reason("emptyfile",   "Empty file (or way to small)"),
+    Reason("corrupted" ,  "Corrupted (signal loss, etc.)"),
+
+    Reason("beginmiss",   "Missing beginning"),
+    Reason("endmiss",     "Missing end"),
+
+    Reason("advertising", "Advertising banner"),
+    Reason("watermark",   "Watermark"),
+
+    Reason("mastered",    "Already mastered"),
+    Reason("redundant",   "Redundant, better recording available"),
+
+    Reason("unwanted",    "Unwanted recording"),
+]
+
 recordings = []
 window = None
 
@@ -39,13 +63,15 @@ class Recording:
 
         dupmeta = load_dupmeta(self)
 
-        self.drop        = dupmeta.get("drop",     "False") == "True"
-        self.good        = dupmeta.get("good",     "False") == "True"
-        self.mastered    = dupmeta.get("mastered", "False") == "True"
+        self.drop        =     dupmeta.get("drop",     None) == "True"
+        self.drop_reason_key = dupmeta.get("reason",   None)
+#       assert len([x for x in DROP_REASONS if x.key == self.drop_reason_key]) == 1
 
-        self.duration    = int(dupmeta.get("duration", "-2"))
+        self.good        =     dupmeta.get("good",     None) == "True"
+        self.mastered    =     dupmeta.get("mastered", None) == "True"
+        self.duration    = int(dupmeta.get("duration", None))
 
-        if self.duration == -2:
+        if self.duration == None:
             self.duration = get_video_duration(self)
             save_dupmeta(self)
 
@@ -79,7 +105,7 @@ def load_dupmeta(rec: Recording) -> dict[str, str]:
 
 def save_dupmeta(rec: Recording) -> None:
     with open(rec.basepath + DUP_META_EXTENSION, "w", encoding="utf-8") as f:
-        f.write(f"duration={rec.duration}\ngood={rec.good}\ndrop={rec.drop}\nmastered={rec.mastered}\n")
+        f.write(f"duration={rec.duration}\ngood={rec.good}\ndrop={rec.drop}\nmastered={rec.mastered}\nreason={rec.drop_reason_key}")
 
 def update_attribute(recs: list[Recording], check, update) -> None:
     if len(recs) == 0:
@@ -89,6 +115,7 @@ def update_attribute(recs: list[Recording], check, update) -> None:
             update(r)
             update_listbox_item(r)
             save_dupmeta(r)
+    window["listbox"].widget.selection_clear(0, len(recordings))
 
 def get_video_duration(rec: Recording) -> int:
     vid     = cv2.VideoCapture(rec.basepath + E2_VIDEO_EXTENSION)
@@ -118,7 +145,6 @@ def init_gui() -> None:
     global window
     window = sg.Window(title="DVR Duplicates",
                        layout=gui_layout,
-                       size=(1280, 720),
                        return_keyboard_events=True,
                        resizable=True,
                        finalize=True)
@@ -126,7 +152,10 @@ def init_gui() -> None:
 def recolor_gui(window: sg.Window) -> None:
     for i, r in enumerate(recordings):
         if r.drop:
-            window["listbox"].widget.itemconfig(i, fg="black", bg="red")
+            if r.drop_reason_key == None:
+                window["listbox"].widget.itemconfig(i, fg="black", bg="yellow")
+            else:
+                window["listbox"].widget.itemconfig(i, fg="white", bg="red")
             continue
 
         if r.mastered:
@@ -144,6 +173,36 @@ def update_listbox_item(rec: Recording) -> None:
     window["listbox"].widget.delete(i)
     window["listbox"].widget.insert(i, rec)
     window["listbox"].widget.selection_set(i)
+
+def ask_reason() -> str:
+    selection_layout = [[sg.Listbox(key="selectionbox",
+                                    values=DROP_REASONS,
+                                    size=(64, 10),
+                                    font=("JetBrains Mono", 14),
+                                    bind_return_key=True,
+                                    select_mode=sg.LISTBOX_SELECT_MODE_BROWSE)
+                         ]]
+
+    selection = sg.Window(title="Choose a drop reason",
+                          layout=selection_layout,
+                          relative_location=(25, 25),
+                          modal=True,
+                          finalize=True)
+
+    selection["selectionbox"].widget.config(fg="white", bg="black")
+    selection["selectionbox"].widget.selection_set(0)
+    selection.force_focus()
+    selection["selectionbox"].set_focus()
+    while True:
+        event, _ = selection.read()
+
+        if event == sg.WIN_CLOSED:
+            return None
+
+        items = selection["selectionbox"].get()
+        if len(items) == 1:
+            selection.close()
+            return items[0].key
 
 def main(argc: int, argv: list[str]) -> None:
     if argc < 2:
@@ -169,6 +228,7 @@ def main(argc: int, argv: list[str]) -> None:
     print("Finished sorting.", file=sys.stderr)
 
     init_gui()
+    window["listbox"].set_focus()
     window["listbox"].widget.config(fg="white", bg="black")
 
     while True:
@@ -179,7 +239,6 @@ def main(argc: int, argv: list[str]) -> None:
 
         recolor_gui(window)
         event, _ = window.read()
-        print(event, file=sys.stderr)
 
         if event == sg.WIN_CLOSED:
             quit()
@@ -193,12 +252,17 @@ def main(argc: int, argv: list[str]) -> None:
 
         # Select for [D]rop
         if event == "d:40":
+            reason_key = ask_reason()
+            update_attribute(listbox_selected_rec,
+                             lambda r: True,
+                             lambda r: setattr(r, "drop_reason_key", reason_key))
             update_attribute(listbox_selected_rec, lambda r: not r.drop, lambda r: setattr(r, "drop", True))
             continue
 
         # [K]eep from Drop
         if event == "k:45":
             update_attribute(listbox_selected_rec, lambda r: r.drop, lambda r: setattr(r, "drop", False))
+            update_attribute(listbox_selected_rec, lambda r: r.drop_reason_key != None, lambda r: setattr(r, "drop_reason_key", None))
             continue
 
         # Mark recording as [G]ood
@@ -220,7 +284,6 @@ def main(argc: int, argv: list[str]) -> None:
             for r in for_deletion:
                 recordings.remove(r)
             window["listbox"].update(recordings)
-
 
 if __name__ == "__main__":
     main(len(sys.argv), sys.argv)
