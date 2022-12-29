@@ -48,6 +48,7 @@ window = None
 class Recording:
     def __init__(self, basepath: str, meta: str):
         self.basepath    = basepath.strip()
+        self.basename   = os.path.basename(self.basepath)
         self.channel     = meta[0].split(":")[-1].strip()
         self.title       = meta[1].strip()
 
@@ -56,10 +57,10 @@ class Recording:
 
         self.description = remove_prefix(meta[2].strip(), self.title).strip()
 
-        basename   = os.path.basename(self.basepath).split(" ")
+        splitname = self.basename.split(" ")
 
-        self.date        = f"{basename[0][:4]}-{basename[0][4:6]}-{basename[0][6:8]}"
-        self.time        = f"{basename[1][:2]}:{basename[1][2:4]}"
+        self.date        = f"{splitname[0][:4]}-{splitname[0][4:6]}-{splitname[0][6:8]}"
+        self.time        = f"{splitname[1][:2]}:{splitname[1][2:4]}"
         self.hd          = "HD" in self.channel.upper()
         self.sortkey     = alphanumeric(f"{self.title}{self.time}").lower()
         self.rec_size    = os.stat(basepath + E2_VIDEO_EXTENSION).st_size
@@ -72,10 +73,14 @@ class Recording:
 
         self.good        =     dupmeta.get("good",     None) == "True"
         self.mastered    =     dupmeta.get("mastered", None) == "True"
-        self.duration    = int(dupmeta.get("duration", None))
 
-        if self.duration == None:
-            self.duration = get_video_duration(self)
+        self.duration    = int(dupmeta.get("duration", -2))
+        self.height      = int(dupmeta.get("height",   -2))
+        self.width       = int(dupmeta.get("width",    -2))
+        self.fps         = int(dupmeta.get("fps",      -2))
+
+        if -2 in (self.duration, self.height, self.width, self.fps):
+            self.duration, self.height, self.width, self.fps = get_video_metadata(self)
             save_dupmeta(self)
 
     def __getattributes(self) -> str:
@@ -108,7 +113,7 @@ def load_dupmeta(rec: Recording) -> dict[str, str]:
 
 def save_dupmeta(rec: Recording) -> None:
     with open(rec.basepath + DUP_META_EXTENSION, "w", encoding="utf-8") as f:
-        f.write(f"duration={rec.duration}\ngood={rec.good}\ndrop={rec.drop}\nmastered={rec.mastered}\n")
+        f.write(f"duration={rec.duration}\nheight={rec.height}\nwidth={rec.width}\nfps={rec.fps}\ngood={rec.good}\ndrop={rec.drop}\nmastered={rec.mastered}\n")
 
 def update_attribute(recs: list[Recording], check, update) -> None:
     if len(recs) == 0:
@@ -120,24 +125,31 @@ def update_attribute(recs: list[Recording], check, update) -> None:
             save_dupmeta(r)
     window["listbox"].widget.selection_clear(0, len(recordings))
 
-def get_video_duration(rec: Recording) -> int:
-    vid     = cv2.VideoCapture(rec.basepath + E2_VIDEO_EXTENSION)
-    fps     = int(vid.get(cv2.CAP_PROP_FPS))
-    frames  = int(vid.get(cv2.CAP_PROP_FRAME_COUNT))
+def get_video_metadata(rec: Recording) -> (int, int, int):
+    vid = cv2.VideoCapture(rec.basepath + E2_VIDEO_EXTENSION)
+
+    fps    = int(vid.get(cv2.CAP_PROP_FPS))
+    frames = int(vid.get(cv2.CAP_PROP_FRAME_COUNT))
+    height = int(vid.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    width  = int(vid.get(cv2.CAP_PROP_FRAME_WIDTH))
+
     vid.release()
 
-    if fps == 0:
-        return -1
-    return frames // fps
+    duration = frames // fps if fps != 0 else -1
+
+    return (duration, height, width, fps)
+
 
 def init_gui() -> None:
     sg.ChangeLookAndFeel("Dark Black")
 
-    gui_layout = [[sg.Text("Please select an item...", key="selectionTxt",
+    gui_layout = [[sg.Text(key="selectionTxt",
                           font=("JetBrains Mono", 14)),
                    sg.Push(), sg.Button("Drop", key="dropBtn")],
                   [sg.Text("[D]rop / Change reason, [K]eep | [O]pen in VLC | Mark as [G]ood, [B]ad (normal)",
                            font=("JetBrains Mono", 14), text_color="grey")],
+                  [sg.Text(key="metaTxt",
+                           font=("JetBrains Mono", 14), text_color="yellow")],
                   [sg.Listbox(key="listbox",
                               values=recordings,
                               size=(1280, 720),
@@ -244,6 +256,10 @@ def main(argc: int, argv: list[str]) -> None:
             quit()
 
         listbox_selected_rec = window["listbox"].get()
+
+        if len(listbox_selected_rec) > 0:
+            r = listbox_selected_rec[0]
+            window["metaTxt"].update(f"{r.width:4d}x{r.height:4d}#{r.fps} | Drop: {r.drop} | Base: {r.basename}")
 
         # [O]pen recording using VLC
         if event == "o:32" and len(listbox_selected_rec) > 0:
