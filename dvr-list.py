@@ -24,19 +24,22 @@ class Reason:
         return self.desc
 
 DROP_REASONS = [
-    Reason("emptyfile",   "Empty file (or way to small)"),
-    Reason("corrupted" ,  "Corrupted (signal loss, etc.)"),
+    Reason("no",             "KEEP | NO DROP"),
 
-    Reason("beginmiss",   "Missing beginning"),
-    Reason("endmiss",     "Missing end"),
+    Reason("badrecording",   "Bad recording | Empty file | etc."),
 
-    Reason("advertising", "Advertising banner"),
-    Reason("watermark",   "Watermark"),
+    Reason("beginmissing",   "Missing beginning"),
+    Reason("endmissing",     "Missing end"),
 
-    Reason("mastered",    "Already mastered"),
-    Reason("redundant",   "Redundant, better recording available"),
+    Reason("advertising",    "Advertising banner"),
+    Reason("watermark",      "Watermark"),
+    Reason("mutilated",      "Aired too early | Wrong age restriction"),
 
-    Reason("unwanted",    "Unwanted recording"),
+    Reason("mastered",       "Already mastered"),
+    Reason("redundant",      "Redundant | Better recording available"),
+
+    Reason("unwanted",       "Unwanted recording"),
+    Reason("unknown",        "Unknown reason"),
 ]
 
 recordings = []
@@ -63,8 +66,8 @@ class Recording:
 
         dupmeta = load_dupmeta(self)
 
-        self.drop        =     dupmeta.get("drop",     None) == "True"
-        self.drop_reason_key = dupmeta.get("reason",   None)
+        self.drop        =     dupmeta.get("drop",     "no")
+
 #       assert len([x for x in DROP_REASONS if x.key == self.drop_reason_key]) == 1
 
         self.good        =     dupmeta.get("good",     None) == "True"
@@ -76,7 +79,7 @@ class Recording:
             save_dupmeta(self)
 
     def __getattributes(self) -> str:
-        return f"{'D' if self.drop else '.'}{'G' if self.good else '.'}{'M' if self.mastered else '.'}"
+        return f"{'D' if self.drop != 'no' else '.'}{'G' if self.good else '.'}{'M' if self.mastered else '.'}"
 
     def __repr__(self) -> str:
         return f"{self.__getattributes()} | {self.date} {self.time} | {(to_GiB(self.rec_size)):4.1f} GiB | {(self.duration // 60):3d} min | {self.channel[:10].ljust(10)} | {self.title[:42].ljust(42)} | {self.description}"
@@ -105,7 +108,7 @@ def load_dupmeta(rec: Recording) -> dict[str, str]:
 
 def save_dupmeta(rec: Recording) -> None:
     with open(rec.basepath + DUP_META_EXTENSION, "w", encoding="utf-8") as f:
-        f.write(f"duration={rec.duration}\ngood={rec.good}\ndrop={rec.drop}\nmastered={rec.mastered}\nreason={rec.drop_reason_key}")
+        f.write(f"duration={rec.duration}\ngood={rec.good}\ndrop={rec.drop}\nmastered={rec.mastered}\n")
 
 def update_attribute(recs: list[Recording], check, update) -> None:
     if len(recs) == 0:
@@ -133,7 +136,7 @@ def init_gui() -> None:
     gui_layout = [[sg.Text("Please select an item...", key="selectionTxt",
                           font=("JetBrains Mono", 14)),
                    sg.Push(), sg.Button("Drop", key="dropBtn")],
-                  [sg.Text("[D]rop, [K]eep | [O]pen in VLC | Mark as [G]ood, [B]ad (normal)",
+                  [sg.Text("[D]rop / Change reason, [K]eep | [O]pen in VLC | Mark as [G]ood, [B]ad (normal)",
                            font=("JetBrains Mono", 14), text_color="grey")],
                   [sg.Listbox(key="listbox",
                               values=recordings,
@@ -151,11 +154,8 @@ def init_gui() -> None:
 
 def recolor_gui(window: sg.Window) -> None:
     for i, r in enumerate(recordings):
-        if r.drop:
-            if r.drop_reason_key == None:
-                window["listbox"].widget.itemconfig(i, fg="black", bg="yellow")
-            else:
-                window["listbox"].widget.itemconfig(i, fg="white", bg="red")
+        if r.drop != "no":
+            window["listbox"].widget.itemconfig(i, fg="white", bg="red")
             continue
 
         if r.mastered:
@@ -232,7 +232,7 @@ def main(argc: int, argv: list[str]) -> None:
     window["listbox"].widget.config(fg="white", bg="black")
 
     while True:
-        selected_recodings = [r for r in recordings if r.drop]
+        selected_recodings = [r for r in recordings if r.drop != "no"]
         good_recodings = [r for r in recordings if r.good]
 
         window["selectionTxt"].update(f"{len(selected_recodings)} item(s) (approx. {to_GiB(sum([r.rec_size for r in selected_recodings])):.1f} GiB) selected for drop | {len(good_recodings)} recordings good | {len(recordings)} total")
@@ -250,19 +250,17 @@ def main(argc: int, argv: list[str]) -> None:
             subprocess.Popen(["/usr/bin/env", "vlc", listbox_selected_rec[0].basepath + E2_VIDEO_EXTENSION])
             continue
 
-        # Select for [D]rop
+        # Select for [D]rop or change reason
         if event == "d:40":
             reason_key = ask_reason()
             update_attribute(listbox_selected_rec,
                              lambda r: True,
-                             lambda r: setattr(r, "drop_reason_key", reason_key))
-            update_attribute(listbox_selected_rec, lambda r: not r.drop, lambda r: setattr(r, "drop", True))
+                             lambda r: setattr(r, "drop", reason_key))
             continue
 
         # [K]eep from Drop
         if event == "k:45":
-            update_attribute(listbox_selected_rec, lambda r: r.drop, lambda r: setattr(r, "drop", False))
-            update_attribute(listbox_selected_rec, lambda r: r.drop_reason_key != None, lambda r: setattr(r, "drop_reason_key", None))
+            update_attribute(listbox_selected_rec, lambda r: r.drop != "no", lambda r: setattr(r, "drop", "no"))
             continue
 
         # Mark recording as [G]ood
@@ -278,7 +276,7 @@ def main(argc: int, argv: list[str]) -> None:
         # Drop button pressed
         if event == "dropBtn":
             for_deletion = set()
-            for r in [x for x in recordings if x.drop]:
+            for r in [x for x in recordings if x.drop != "no"]:
                 drop_recording(r)
                 for_deletion.add(r)
             for r in for_deletion:
