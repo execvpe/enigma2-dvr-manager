@@ -69,10 +69,10 @@ class Recording:
 
         self.drop        =     dupmeta.get("drop",     "no")
 
-#       assert len([x for x in DROP_REASONS if x.key == self.drop_reason_key]) == 1
-
         self.good        =     dupmeta.get("good",     None) == "True"
         self.mastered    =     dupmeta.get("mastered", None) == "True"
+
+        assert not (self.mastered and self.drop != "no")
 
         self.duration    = int(dupmeta.get("duration", -2))
         self.height      = int(dupmeta.get("height",   -2))
@@ -270,7 +270,7 @@ def main(argc: int, argv: list[str]) -> None:
         if event == "d:40":
             reason_key = ask_reason()
             update_attribute(listbox_selected_rec,
-                             lambda r: True,
+                             lambda r: not r.mastered,
                              lambda r: setattr(r, "drop", reason_key))
             continue
 
