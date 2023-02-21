@@ -3,6 +3,7 @@
 import cv2
 import glob
 import PySimpleGUI as sg
+import sqlite3
 import os
 import re
 import subprocess
@@ -12,8 +13,6 @@ import sys
 E2_VIDEO_EXTENSION = ".ts"
 # As far as I know there are six files associated to each recording
 E2_EXTENSIONS = [".eit", ".ts", ".ts.ap", ".ts.cuts", ".ts.meta", ".ts.sc"]
-# Custom metadata file extension used by this software
-DUP_META_EXTENSION = ".dupmeta"
 
 class Reason:
     def __init__(self, key: str, desc: str):
@@ -44,50 +43,52 @@ DROP_REASONS = [
 
 recordings = []
 window = None
-
+database = sqlite3.connect("rec_cache.db")
 class Recording:
-    def __init__(self, basepath: str, meta: str):
-        self.basepath    = basepath.strip()
-        self.basename   = os.path.basename(self.basepath)
-        self.channel     = meta[0].split(":")[-1].strip()
-        self.title       = meta[1].strip()
+    def __getattributes(rec) -> str:
+        return f"{'D' if rec.drop_reason != 'no' else '.'}{'G' if rec.is_good else '.'}{'M' if rec.is_mastered else '.'}"
 
-        if len(self.title) == 0:
-            self.title = "[?] " + self.basepath.split(" - ")[2]
+    def __repr__(rec) -> str:
+        return f"{rec.__getattributes()} | {rec.date_str} {rec.time_str} | {(to_GiB(rec.file_size)):4.1f} GiB | {(rec.video_duration // 60):3d} min | {rec.epg_channel[:10].ljust(10)} | {rec.epg_title[:42].ljust(42)} | {rec.epg_description}"
 
-        self.description = remove_prefix(meta[2].strip(), self.title).strip()
+class RecordingFactory:
+    @staticmethod
+    def from_meta_file(basepath: str, meta: list[str]) -> Recording:
+        rec = Recording()
 
-        splitname = self.basename.split(" ")
+        rec.basepath = basepath
 
-        self.date        = f"{splitname[0][:4]}-{splitname[0][4:6]}-{splitname[0][6:8]}"
-        self.time        = f"{splitname[1][:2]}:{splitname[1][2:4]}"
-        self.hd          = "HD" in self.channel.upper()
-        self.sortkey     = alphanumeric(f"{self.title}{self.time}").lower()
-        self.rec_size    = os.stat(basepath + E2_VIDEO_EXTENSION).st_size
+        rec.file_basename, rec.file_size = os.path.basename(basepath), os.stat(basepath + E2_VIDEO_EXTENSION).st_size
+        rec.epg_channel, rec.epg_title = meta[0].split(":")[-1].strip(), meta[1].strip()
+        rec.epg_description = remove_prefix(meta[2].strip(), rec.epg_title).strip()
+        rec.video_duration, rec.video_height, rec.video_width, rec.video_fps = get_video_metadata(rec)
+        rec.is_good, rec.drop_reason, rec.is_mastered = False, "no", False
 
-        dupmeta = load_dupmeta(self)
+        if len(rec.epg_title) == 0:
+            rec.epg_title = "[?] " + basepath.split(" - ")[2]
 
-        self.drop        =     dupmeta.get("drop",     "no")
+        RecordingFactory.__both(rec)
+        return rec
 
-        self.good        =     dupmeta.get("good",     None) == "True"
-        self.mastered    =     dupmeta.get("mastered", None) == "True"
+    @staticmethod
+    def from_database(basepath: str) -> Recording:
+        basename = os.path.basename(basepath)
+        rec = load_from_cache(basename)
+        if rec == None:
+            return None
 
-        assert not (self.mastered and self.drop != "no")
+        rec.basepath = basepath
 
-        self.duration    = int(dupmeta.get("duration", -2))
-        self.height      = int(dupmeta.get("height",   -2))
-        self.width       = int(dupmeta.get("width",    -2))
-        self.fps         = int(dupmeta.get("fps",      -2))
+        RecordingFactory.__both(rec)
+        return rec
 
-        if -2 in (self.duration, self.height, self.width, self.fps):
-            self.duration, self.height, self.width, self.fps = get_video_metadata(self)
-            save_dupmeta(self)
+    @staticmethod
+    def __both(rec: Recording) -> None:
+        splitname = rec.file_basename.split(" ")
 
-    def __getattributes(self) -> str:
-        return f"{'D' if self.drop != 'no' else '.'}{'G' if self.good else '.'}{'M' if self.mastered else '.'}"
-
-    def __repr__(self) -> str:
-        return f"{self.__getattributes()} | {self.date} {self.time} | {(to_GiB(self.rec_size)):4.1f} GiB | {(self.duration // 60):3d} min | {self.channel[:10].ljust(10)} | {self.title[:42].ljust(42)} | {self.description}"
+        rec.date_str = f"{splitname[0][:4]}-{splitname[0][4:6]}-{splitname[0][6:8]}"
+        rec.time_str = f"{splitname[1][:2]}:{splitname[1][2:4]}"
+        rec.sortkey  = alphanumeric(f"{rec.epg_title}{rec.time_str}").lower()
 
 # Remove everything that is not a letter or digit
 def alphanumeric(line: str) -> str:
@@ -100,20 +101,11 @@ def to_GiB(size: int) -> float:
     return size / 1_073_741_824
 
 def drop_recording(rec: Recording) -> None:
-    for e in E2_EXTENSIONS + [DUP_META_EXTENSION]:
+    for e in E2_EXTENSIONS:
         filepath = rec.basepath + e
         if os.path.exists(filepath):
             print(filepath)
-
-def load_dupmeta(rec: Recording) -> dict[str, str]:
-    if not os.path.exists(rec.basepath + DUP_META_EXTENSION):
-        return dict()
-    with open(rec.basepath + DUP_META_EXTENSION, "r", encoding="utf-8") as f:
-        return dict([x.strip().split("=") for x in f.readlines()])
-
-def save_dupmeta(rec: Recording) -> None:
-    with open(rec.basepath + DUP_META_EXTENSION, "w", encoding="utf-8") as f:
-        f.write(f"duration={rec.duration}\nheight={rec.height}\nwidth={rec.width}\nfps={rec.fps}\ngood={rec.good}\ndrop={rec.drop}\nmastered={rec.mastered}\n")
+    remove_from_cache(rec)
 
 def update_attribute(recs: list[Recording], check, update) -> None:
     if len(recs) == 0:
@@ -122,10 +114,10 @@ def update_attribute(recs: list[Recording], check, update) -> None:
         if check(r):
             update(r)
             update_listbox_item(r)
-            save_dupmeta(r)
+            save_to_cache(r)
     window["listbox"].widget.selection_clear(0, len(recordings))
 
-def get_video_metadata(rec: Recording) -> (int, int, int):
+def get_video_metadata(rec: Recording) -> (int, int, int, int):
     vid = cv2.VideoCapture(rec.basepath + E2_VIDEO_EXTENSION)
 
     fps    = int(vid.get(cv2.CAP_PROP_FPS))
@@ -166,15 +158,15 @@ def init_gui() -> None:
 
 def recolor_gui(window: sg.Window) -> None:
     for i, r in enumerate(recordings):
-        if r.drop != "no":
+        if r.drop_reason != "no":
             window["listbox"].widget.itemconfig(i, fg="white", bg="red")
             continue
 
-        if r.mastered:
+        if r.is_mastered:
             window["listbox"].widget.itemconfig(i, fg="white", bg="blue")
             continue
 
-        if r.good:
+        if r.is_good:
             window["listbox"].widget.itemconfig(i, fg="black", bg="light green")
             continue
 
@@ -216,24 +208,101 @@ def ask_reason() -> str:
             selection.close()
             return items[0].key
 
+def init_db_cache() -> None:
+    c = database.cursor()
+    c.execute("""
+              CREATE TABLE IF NOT EXISTS
+                recordings(file_basename VARCHAR PRIMARY KEY, file_size INT,
+                  epg_channel VARCHAR, epg_title VARCHAR, epg_description VARCHAR,
+                   video_duration INT, video_height INT, video_width INT, video_fps INT,
+                   is_good BOOL, drop_reason VARCHAR, is_mastered BOOL);
+              """)
+
+def load_from_cache(basename: str) -> Recording:
+    c = database.cursor()
+    c.execute("""
+              SELECT file_basename, file_size,
+                epg_channel, epg_title, epg_description,
+                video_duration, video_height, video_width, video_fps,
+                is_good, drop_reason, is_mastered
+              FROM recordings
+              WHERE file_basename = ?;
+              """, (basename, ))
+    raw = c.fetchone()
+
+    if raw == None:
+        return None
+
+    rec = Recording()
+    rec.file_basename, rec.file_size = raw[0], int(raw[1])
+    rec.epg_channel, rec.epg_title, rec.epg_description = raw[2], raw[3], raw[4]
+    rec.video_duration, rec.video_height, rec.video_width, rec.video_fps = raw[5], raw[6], raw[7], raw[8]
+    rec.is_good, rec.drop_reason, rec.is_mastered = bool(raw[9]), raw[10], bool(raw[11])
+
+    return rec
+
+def save_to_cache(rec: Recording) -> None:
+    remove_from_cache(rec)
+    c = database.cursor()
+    c.execute("""
+              INSERT INTO recordings(file_basename, file_size,
+                epg_channel, epg_title, epg_description,
+                video_duration, video_height, video_width, video_fps,
+                is_good, drop_reason, is_mastered)
+              VALUES (?, ?,
+                ?, ?, ?,
+                ?, ?, ?, ?,
+                ?, ?, ?);
+              """, (rec.file_basename, rec.file_size,
+              rec.epg_channel, rec.epg_title, rec.epg_description,
+              rec.video_duration, rec.video_height, rec.video_width, rec.video_fps,
+              rec.is_good, rec.drop_reason, rec.is_mastered))
+
+    database.commit()
+
+def remove_from_cache(rec: Recording):
+    c = database.cursor()
+    c.execute("""
+              DELETE FROM recordings
+              WHERE file_basename = ?
+              """, (rec.file_basename, ))
+
+    assert c.rowcount <= 1
+    database.commit()
+
 def main(argc: int, argv: list[str]) -> None:
     if argc < 2:
         raise IndexError(f"Usage: {argv[0]} <dir path> [dir path ...]")
 
+    init_db_cache()
+
     print("Scanning directories... (This may take a while)", file=sys.stderr)
+
     filenames = []
     for i, d in enumerate(argv[1:]):
         path = d + "/*" + E2_VIDEO_EXTENSION
         print(f"Scanning directory: {i + 1} of {argc - 1}", end="\r", file=sys.stderr)
         filenames += glob.glob(path)
+
     print(f"Successfully scanned {argc - 1} directories.", file=sys.stderr)
 
-    print("Reading meta files... (This may take a while)", file=sys.stderr)
+    print("Processing files... (This may take a while)", file=sys.stderr)
+
+    db_count = 0
     for i, f in enumerate(filenames):
+        print(f"Processing file {i + 1} of {len(filenames)}", end="\r", file=sys.stderr)
+        basepath = re.sub("\.ts$", "", f)
+        rec = RecordingFactory.from_database(basepath)
+        if rec != None:
+            recordings.append(rec)
+            db_count += 1
+            continue
         with open(f + ".meta", "r", encoding="utf-8") as m:
-            print(f"Scanning meta file {i + 1} of {len(filenames)}", end="\r", file=sys.stderr)
-            recordings.append(Recording(re.sub("\.ts$", "", f), m.readlines()))
-    print(f"Successfully read {len(filenames)} meta files.", file=sys.stderr)
+            rec = RecordingFactory.from_meta_file(basepath, m.readlines())
+            save_to_cache(rec)
+            recordings.append(rec)
+
+    print(f"Successfully processed {len(filenames)} files. ({db_count} in cache, {len(filenames) - db_count} new)", file=sys.stderr)
 
     print("Sorting...", file=sys.stderr)
     recordings.sort(key=lambda r: r.sortkey)
@@ -244,10 +313,10 @@ def main(argc: int, argv: list[str]) -> None:
     window["listbox"].widget.config(fg="white", bg="black")
 
     while True:
-        selected_recodings = [r for r in recordings if r.drop != "no"]
-        good_recodings = [r for r in recordings if r.good]
+        selected_recodings = [r for r in recordings if r.drop_reason != "no"]
+        good_recodings = [r for r in recordings if r.is_good]
 
-        window["selectionTxt"].update(f"{len(selected_recodings)} item(s) (approx. {to_GiB(sum([r.rec_size for r in selected_recodings])):.1f} GiB) selected for drop | {len(good_recodings)} recordings good | {len(recordings)} total")
+        window["selectionTxt"].update(f"{len(selected_recodings)} item(s) (approx. {to_GiB(sum([r.file_size for r in selected_recodings])):.1f} GiB) selected for drop | {len(good_recodings)} recordings good | {len(recordings)} total")
 
         recolor_gui(window)
         event, _ = window.read()
@@ -259,7 +328,7 @@ def main(argc: int, argv: list[str]) -> None:
 
         if len(listbox_selected_rec) > 0:
             r = listbox_selected_rec[0]
-            window["metaTxt"].update(f"{r.width:4d}x{r.height:4d}#{r.fps} | Drop: {r.drop} | Base: {r.basename}")
+            window["metaTxt"].update(f"{r.video_width:4d}x{r.video_height:4d}#{r.video_fps} | Drop: {r.drop_reason} | Base: {r.file_basename}")
 
         # [O]pen recording using VLC
         if event == "o:32" and len(listbox_selected_rec) > 0:
@@ -270,29 +339,29 @@ def main(argc: int, argv: list[str]) -> None:
         if event == "d:40":
             reason_key = ask_reason()
             update_attribute(listbox_selected_rec,
-                             lambda r: not r.mastered,
-                             lambda r: setattr(r, "drop", reason_key))
+                             lambda r: not r.is_mastered,
+                             lambda r: setattr(r, "drop_reason", reason_key))
             continue
 
         # [K]eep from Drop
         if event == "k:45":
-            update_attribute(listbox_selected_rec, lambda r: r.drop != "no", lambda r: setattr(r, "drop", "no"))
+            update_attribute(listbox_selected_rec, lambda r: r.drop_reason != "no", lambda r: setattr(r, "drop_reason", "no"))
             continue
 
         # Mark recording as [G]ood
         if event == "g:42":
-            update_attribute(listbox_selected_rec, lambda r: not r.good, lambda r: setattr(r, "good", True))
+            update_attribute(listbox_selected_rec, lambda r: not r.is_good, lambda r: setattr(r, "is_good", True))
             continue
 
         # Mark recording as [B]ad (normal)
         if event == "b:56":
-            update_attribute(listbox_selected_rec, lambda r: r.good, lambda r: setattr(r, "good", False))
+            update_attribute(listbox_selected_rec, lambda r: r.is_good, lambda r: setattr(r, "is_good", False))
             continue
 
         # Drop button pressed
         if event == "dropBtn":
             for_deletion = set()
-            for r in [x for x in recordings if x.drop != "no"]:
+            for r in [x for x in recordings if x.drop_reason != "no"]:
                 drop_recording(r)
                 for_deletion.add(r)
             for r in for_deletion:
