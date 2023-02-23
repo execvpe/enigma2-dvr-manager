@@ -116,9 +116,11 @@ def update_attribute(recs: list[Recording], check, update) -> None:
     for r in recs:
         if check(r):
             update(r)
-            gui_update_item(r)
             db_save(r)
-    window["listbox"].widget.selection_clear(0, len(recordings))
+            i = recordings.index(rec)
+            window["recordingBox"].widget.delete(i)
+            window["recordingBox"].widget.insert(i, rec)
+            window["selectionTxt"].update("0 recordings selected")
 
 def get_video_metadata(rec: Recording) -> (int, int, int, int):
     vid = cv2.VideoCapture(rec.basepath + E2_VIDEO_EXTENSION)
@@ -137,18 +139,32 @@ def get_video_metadata(rec: Recording) -> (int, int, int, int):
 def gui_init() -> None:
     sg.ChangeLookAndFeel("Dark Black")
 
-    gui_layout = [[sg.Text(key="selectionTxt",
-                          font=("JetBrains Mono", 14)),
+    gui_font = ("JetBrains Mono", 14)
+
+    gui_layout = [[sg.Column([[sg.Text(key="informationTxt",
+                               font=gui_font)],
+                              [sg.HorizontalSeparator(color="green")],
+                              [sg.Text("[D]rop / Change reason, [K]eep | [O]pen in VLC | Mark as [G]ood, [B]ad (normal)",
+                               font=gui_font, text_color="grey")],
+                              [sg.HorizontalSeparator(color="green")],
+                              [sg.Text(key="metaTxt",
+                               font=gui_font, text_color="yellow")],
+                              [sg.Text(key="selectionTxt",
+                               font=gui_font, text_color="yellow")]
+                             ]), sg.Push(),
+                   sg.Listbox(key="selectionBox",
+                              disabled=True,
+                              values=DROP_REASONS,
+                              size=(64, 12),
+                              font=gui_font,
+                              bind_return_key=True,
+                              select_mode=sg.LISTBOX_SELECT_MODE_BROWSE),
                    sg.Push(), sg.Button("Drop", key="dropBtn")],
-                  [sg.Text("[D]rop / Change reason, [K]eep | [O]pen in VLC | Mark as [G]ood, [B]ad (normal)",
-                           font=("JetBrains Mono", 14), text_color="grey")],
-                  [sg.Text(key="metaTxt",
-                           font=("JetBrains Mono", 14), text_color="yellow")],
-                  [sg.Listbox(key="listbox",
+                  [sg.Listbox(key="recordingBox",
                               values=recordings,
                               size=(1280, 720),
                               enable_events=True,
-                              font=("JetBrains Mono", 14),
+                              font=gui_font,
                               select_mode=sg.LISTBOX_SELECT_MODE_EXTENDED)]]
 
     global window
@@ -158,57 +174,25 @@ def gui_init() -> None:
                        resizable=True,
                        finalize=True)
 
+    window["recordingBox"].set_focus()
+    window["recordingBox"].widget.config(fg="white", bg="black")
+    window["selectionBox"].widget.config(fg="white", bg="black")
+
 def gui_recolor(window: sg.Window) -> None:
     for i, r in enumerate(recordings):
         if r.drop_reason != "no":
-            window["listbox"].widget.itemconfig(i, fg="white", bg="red")
+            window["recordingBox"].widget.itemconfig(i, fg="white", bg="red")
             continue
 
         if r.is_mastered:
-            window["listbox"].widget.itemconfig(i, fg="white", bg="blue")
+            window["recordingBox"].widget.itemconfig(i, fg="white", bg="blue")
             continue
 
         if r.is_good:
-            window["listbox"].widget.itemconfig(i, fg="black", bg="light green")
+            window["recordingBox"].widget.itemconfig(i, fg="black", bg="light green")
             continue
 
-        window["listbox"].widget.itemconfig(i, fg="white", bg="black")
-
-def gui_update_item(rec: Recording) -> None:
-    i = recordings.index(rec)
-    window["listbox"].widget.delete(i)
-    window["listbox"].widget.insert(i, rec)
-    window["listbox"].widget.selection_set(i)
-
-def ask_reason() -> str:
-    selection_layout = [[sg.Listbox(key="selectionbox",
-                                    values=DROP_REASONS,
-                                    size=(64, 10),
-                                    font=("JetBrains Mono", 14),
-                                    bind_return_key=True,
-                                    select_mode=sg.LISTBOX_SELECT_MODE_BROWSE)
-                         ]]
-
-    selection = sg.Window(title="Choose a drop reason",
-                          layout=selection_layout,
-                          relative_location=(25, 25),
-                          modal=True,
-                          finalize=True)
-
-    selection["selectionbox"].widget.config(fg="white", bg="black")
-    selection["selectionbox"].widget.selection_set(0)
-    selection.force_focus()
-    selection["selectionbox"].set_focus()
-    while True:
-        event, _ = selection.read()
-
-        if event == sg.WIN_CLOSED:
-            return None
-
-        items = selection["selectionbox"].get()
-        if len(items) == 1:
-            selection.close()
-            return items[0].key
+        window["recordingBox"].widget.itemconfig(i, fg="white", bg="black")
 
 def db_init() -> None:
     c = database.cursor()
@@ -333,14 +317,12 @@ def main(argc: int, argv: list[str]) -> None:
     print("Finished sorting.", file=sys.stderr)
 
     gui_init()
-    window["listbox"].set_focus()
-    window["listbox"].widget.config(fg="white", bg="black")
 
     while True:
         selected_recodings = [r for r in recordings if r.drop_reason != "no"]
         good_recodings = [r for r in recordings if r.is_good]
 
-        window["selectionTxt"].update(f"{len(selected_recodings)} item(s) (approx. {to_GiB(sum([r.file_size for r in selected_recodings])):.1f} GiB) selected for drop | {len(good_recodings)} recordings good | {len(recordings)} total")
+        window["informationTxt"].update(f"{len(selected_recodings)} item(s) (approx. {to_GiB(sum([r.file_size for r in selected_recodings])):.1f} GiB) selected for drop | {len(good_recodings)} recordings good | {len(recordings)} total")
 
         gui_recolor(window)
         event, _ = window.read()
@@ -348,38 +330,61 @@ def main(argc: int, argv: list[str]) -> None:
         if event == sg.WIN_CLOSED:
             quit()
 
-        listbox_selected_rec = window["listbox"].get()
+        recordingBox_selected_rec = window["recordingBox"].get()
 
-        if len(listbox_selected_rec) > 0:
-            r = listbox_selected_rec[0]
-            window["metaTxt"].update(f"{r.video_width:4d}x{r.video_height:4d}#{r.video_fps} | Drop: {r.drop_reason} | Base: {r.file_basename}")
+        if len(recordingBox_selected_rec) > 0:
+            r = recordingBox_selected_rec[0]
+            window["metaTxt"].update(f"{r.video_width:4d}x{r.video_height:4d}#{r.video_fps} | Drop: {r.drop_reason}")
+            window["selectionTxt"].update(f"{len(recordingBox_selected_rec)} recordings selected")
 
         # [O]pen recording using VLC
-        if event == "o:32" and len(listbox_selected_rec) > 0:
-            subprocess.Popen(["/usr/bin/env", "vlc", listbox_selected_rec[0].basepath + E2_VIDEO_EXTENSION])
+        if event == "o:32" and len(recordingBox_selected_rec) > 0:
+            subprocess.Popen(["/usr/bin/env", "vlc", recordingBox_selected_rec[0].basepath + E2_VIDEO_EXTENSION])
             continue
 
         # Select for [D]rop or change reason
         if event == "d:40":
-            reason_key = ask_reason()
-            update_attribute(listbox_selected_rec,
+            window["recordingBox"].update(disabled=True)
+            window["dropBtn"].update(disabled=True)
+            window["metaTxt"].update("Please choose a drop reason!")
+            window["selectionBox"].update(disabled=False)
+            window["selectionBox"].set_focus()
+
+            while True:
+                event, _ = window.read()
+
+                if event != "selectionBox":
+                    continue
+
+                items = window["selectionBox"].get()
+                if len(items) == 1:
+                    reason_key = items[0].key
+                    break
+
+            window["selectionBox"].update(disabled=True)
+            window["dropBtn"].update(disabled=False)
+            window["metaTxt"].update("")
+            window["recordingBox"].update(disabled=False)
+            window["recordingBox"].set_focus()
+
+            update_attribute(recordingBox_selected_rec,
                              lambda r: not r.is_mastered,
                              lambda r: setattr(r, "drop_reason", reason_key))
             continue
 
         # [K]eep from Drop
         if event == "k:45":
-            update_attribute(listbox_selected_rec, lambda r: r.drop_reason != "no", lambda r: setattr(r, "drop_reason", "no"))
+            update_attribute(recordingBox_selected_rec, lambda r: r.drop_reason != "no", lambda r: setattr(r, "drop_reason", "no"))
             continue
 
         # Mark recording as [G]ood
         if event == "g:42":
-            update_attribute(listbox_selected_rec, lambda r: not r.is_good, lambda r: setattr(r, "is_good", True))
+            update_attribute(recordingBox_selected_rec, lambda r: not r.is_good, lambda r: setattr(r, "is_good", True))
             continue
 
         # Mark recording as [B]ad (normal)
         if event == "b:56":
-            update_attribute(listbox_selected_rec, lambda r: r.is_good, lambda r: setattr(r, "is_good", False))
+            update_attribute(recordingBox_selected_rec, lambda r: r.is_good, lambda r: setattr(r, "is_good", False))
             continue
 
         # Drop button pressed
@@ -390,7 +395,7 @@ def main(argc: int, argv: list[str]) -> None:
                 for_deletion.add(r)
             for r in for_deletion:
                 recordings.remove(r)
-            window["listbox"].update(recordings)
+            window["recordingBox"].update(recordings)
 
 if __name__ == "__main__":
     main(len(sys.argv), sys.argv)
