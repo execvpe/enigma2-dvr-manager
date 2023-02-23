@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import cv2
-import glob
 import PySimpleGUI as sg
 import sqlite3
 import os
@@ -130,7 +129,6 @@ def get_video_metadata(rec: Recording) -> (int, int, int, int):
     duration = frames // fps if fps != 0 else -1
 
     return (duration, height, width, fps)
-
 
 def init_gui() -> None:
     sg.ChangeLookAndFeel("Dark Black")
@@ -270,6 +268,26 @@ def remove_from_cache(rec: Recording):
     assert c.rowcount <= 1
     database.commit()
 
+def all_recordings_in(dirpath: str) -> list[str]:
+    all_files = []
+    try:
+        for f in os.listdir(dirpath):
+            filepath = os.path.join(dirpath, f)
+
+            if os.path.isdir(filepath):
+                all_files += all_recordings_in(filepath)
+                continue
+
+            if not os.path.isfile(filepath):
+                continue
+
+            if f.endswith(E2_VIDEO_EXTENSION):
+                all_files.append(filepath)
+    except PermissionError:
+        pass
+
+    return all_files
+
 def main(argc: int, argv: list[str]) -> None:
     if argc < 2:
         raise IndexError(f"Usage: {argv[0]} <dir path> [dir path ...]")
@@ -280,29 +298,31 @@ def main(argc: int, argv: list[str]) -> None:
 
     filenames = []
     for i, d in enumerate(argv[1:]):
-        path = d + "/*" + E2_VIDEO_EXTENSION
         print(f"Scanning directory: {i + 1} of {argc - 1}", end="\r", file=sys.stderr)
-        filenames += glob.glob(path)
+        filenames += all_recordings_in(d)
 
     print(f"Successfully scanned {argc - 1} directories.", file=sys.stderr)
 
-    print("Processing files... (This may take a while)", file=sys.stderr)
+    print("Processing recordings... (This may take a while)", file=sys.stderr)
 
     db_count = 0
     for i, f in enumerate(filenames):
-        print(f"Processing file {i + 1} of {len(filenames)}", end="\r", file=sys.stderr)
+        print(f"Processing recording {i + 1} of {len(filenames)}", end="\r", file=sys.stderr)
         basepath = re.sub("\.ts$", "", f)
         rec = RecordingFactory.from_database(basepath)
         if rec != None:
             recordings.append(rec)
             db_count += 1
             continue
-        with open(f + ".meta", "r", encoding="utf-8") as m:
-            rec = RecordingFactory.from_meta_file(basepath, m.readlines())
-            save_to_cache(rec)
-            recordings.append(rec)
+        try:
+            with open(f + ".meta", "r", encoding="utf-8") as m:
+                rec = RecordingFactory.from_meta_file(basepath, m.readlines())
+                save_to_cache(rec)
+                recordings.append(rec)
+        except FileNotFoundError:
+            print(f"{f}.meta not found! Skipping...", file=sys.stderr)
 
-    print(f"Successfully processed {len(filenames)} files. ({db_count} in cache, {len(filenames) - db_count} new)", file=sys.stderr)
+    print(f"Successfully processed {len(filenames)} recordings. ({db_count} in cache, {len(filenames) - db_count} new)", file=sys.stderr)
 
     print("Sorting...", file=sys.stderr)
     recordings.sort(key=lambda r: r.sortkey)
