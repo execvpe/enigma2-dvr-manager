@@ -74,7 +74,7 @@ class RecordingFactory:
     @staticmethod
     def from_database(basepath: str) -> Recording:
         basename = os.path.basename(basepath)
-        rec = load_from_cache(basename)
+        rec = db_load(basename)
         if rec == None:
             return None
 
@@ -108,7 +108,7 @@ def drop_recording(rec: Recording) -> None:
         filepath = rec.basepath + e
         if os.path.exists(filepath):
             print(filepath)
-    remove_from_cache(rec)
+    db_remove(rec)
 
 def update_attribute(recs: list[Recording], check, update) -> None:
     if len(recs) == 0:
@@ -116,8 +116,8 @@ def update_attribute(recs: list[Recording], check, update) -> None:
     for r in recs:
         if check(r):
             update(r)
-            update_listbox_item(r)
-            save_to_cache(r)
+            gui_update_item(r)
+            db_save(r)
     window["listbox"].widget.selection_clear(0, len(recordings))
 
 def get_video_metadata(rec: Recording) -> (int, int, int, int):
@@ -134,7 +134,7 @@ def get_video_metadata(rec: Recording) -> (int, int, int, int):
 
     return (duration, height, width, fps)
 
-def init_gui() -> None:
+def gui_init() -> None:
     sg.ChangeLookAndFeel("Dark Black")
 
     gui_layout = [[sg.Text(key="selectionTxt",
@@ -158,7 +158,7 @@ def init_gui() -> None:
                        resizable=True,
                        finalize=True)
 
-def recolor_gui(window: sg.Window) -> None:
+def gui_recolor(window: sg.Window) -> None:
     for i, r in enumerate(recordings):
         if r.drop_reason != "no":
             window["listbox"].widget.itemconfig(i, fg="white", bg="red")
@@ -174,7 +174,7 @@ def recolor_gui(window: sg.Window) -> None:
 
         window["listbox"].widget.itemconfig(i, fg="white", bg="black")
 
-def update_listbox_item(rec: Recording) -> None:
+def gui_update_item(rec: Recording) -> None:
     i = recordings.index(rec)
     window["listbox"].widget.delete(i)
     window["listbox"].widget.insert(i, rec)
@@ -210,7 +210,7 @@ def ask_reason() -> str:
             selection.close()
             return items[0].key
 
-def init_db_cache() -> None:
+def db_init() -> None:
     c = database.cursor()
     c.execute("""
               CREATE TABLE IF NOT EXISTS
@@ -220,7 +220,7 @@ def init_db_cache() -> None:
                    is_good BOOL, drop_reason VARCHAR, is_mastered BOOL);
               """)
 
-def load_from_cache(basename: str) -> Recording:
+def db_load(basename: str) -> Recording:
     c = database.cursor()
     c.execute("""
               SELECT file_basename, file_size,
@@ -243,8 +243,8 @@ def load_from_cache(basename: str) -> Recording:
 
     return rec
 
-def save_to_cache(rec: Recording) -> None:
-    remove_from_cache(rec)
+def db_save(rec: Recording) -> None:
+    db_remove(rec)
     c = database.cursor()
     c.execute("""
               INSERT INTO recordings(file_basename, file_size,
@@ -262,7 +262,7 @@ def save_to_cache(rec: Recording) -> None:
 
     database.commit()
 
-def remove_from_cache(rec: Recording):
+def db_remove(rec: Recording):
     c = database.cursor()
     c.execute("""
               DELETE FROM recordings
@@ -296,7 +296,7 @@ def main(argc: int, argv: list[str]) -> None:
     if argc < 2:
         raise IndexError(f"Usage: {argv[0]} <dir path> [dir path ...]")
 
-    init_db_cache()
+    db_init()
 
     print("Scanning directories... (This may take a while)", file=sys.stderr)
 
@@ -321,7 +321,7 @@ def main(argc: int, argv: list[str]) -> None:
         try:
             with open(f + ".meta", "r", encoding="utf-8") as m:
                 rec = RecordingFactory.from_meta_file(basepath, m.readlines())
-                save_to_cache(rec)
+                db_save(rec)
                 recordings.append(rec)
         except FileNotFoundError:
             print(f"{f}.meta not found! Skipping...", file=sys.stderr)
@@ -332,7 +332,7 @@ def main(argc: int, argv: list[str]) -> None:
     recordings.sort(key=lambda r: r.sortkey)
     print("Finished sorting.", file=sys.stderr)
 
-    init_gui()
+    gui_init()
     window["listbox"].set_focus()
     window["listbox"].widget.config(fg="white", bg="black")
 
@@ -342,7 +342,7 @@ def main(argc: int, argv: list[str]) -> None:
 
         window["selectionTxt"].update(f"{len(selected_recodings)} item(s) (approx. {to_GiB(sum([r.file_size for r in selected_recodings])):.1f} GiB) selected for drop | {len(good_recodings)} recordings good | {len(recordings)} total")
 
-        recolor_gui(window)
+        gui_recolor(window)
         event, _ = window.read()
 
         if event == sg.WIN_CLOSED:
