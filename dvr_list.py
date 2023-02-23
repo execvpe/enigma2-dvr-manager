@@ -1,20 +1,23 @@
 #!/usr/bin/env python3
 
 import cv2
-import PySimpleGUI as sg
-import sqlite3
 import os
 import re
+import PySimpleGUI as sg
+import sqlite3
 import subprocess
 import sys
+
+from typing import Callable, Optional, Tuple
 
 # Enigma 2 video file extension (default: ".ts")
 E2_VIDEO_EXTENSION = ".ts"
 # As far as I know there are six files associated to each recording
 E2_EXTENSIONS = [".eit", ".ts", ".ts.ap", ".ts.cuts", ".ts.meta", ".ts.sc"]
 
+# This class is necessary because sg.Listbox requires objects which have __repr__()
 class Reason:
-    def __init__(self, key: str, desc: str):
+    def __init__(self, key: str, desc: str) -> None:
         self.key  = key
         self.desc = desc
 
@@ -40,15 +43,36 @@ DROP_REASONS = [
     Reason("unknown",        "Unknown reason"),
 ]
 
-recordings = []
-window = None
-database = sqlite3.connect("rec_cache.db")
 class Recording:
+    basepath: str
+    file_basename: str
+    file_size: int
+    epg_channel: str
+    epg_title: str
+    epg_description: str
+    video_duration: int
+    video_height: int
+    video_width: int
+    video_fps: int
+    is_good: bool
+    drop_reason: str
+    is_mastered: bool
+    date_str: str
+    time_str: str
+    sortkey: str
+
     def __getattributes(rec) -> str:
         return f"{'D' if rec.drop_reason != 'no' else '.'}{'G' if rec.is_good else '.'}{'M' if rec.is_mastered else '.'}"
 
     def __repr__(rec) -> str:
         return f"{rec.__getattributes()} | {rec.date_str} {rec.time_str} | {(to_GiB(rec.file_size)):4.1f} GiB | {(rec.video_duration // 60):3d} min | {rec.epg_channel[:10].ljust(10)} | {rec.epg_title[:42].ljust(42)} | {rec.epg_description}"
+
+# Recording objects
+recordings: list[Recording] = []
+# PySimpleGUI window object
+window: sg.Window
+# Recording cache database
+database = sqlite3.connect("recordings.sqlite3")
 
 class RecordingFactory:
     @staticmethod
@@ -72,10 +96,10 @@ class RecordingFactory:
         return rec
 
     @staticmethod
-    def from_database(basepath: str) -> Recording:
+    def from_database(basepath: str) -> Optional[Recording]:
         basename = os.path.basename(basepath)
         rec = db_load(basename)
-        if rec == None:
+        if rec is None:
             return None
 
         assert rec.file_size == os.stat(basepath + E2_VIDEO_EXTENSION).st_size
@@ -110,19 +134,21 @@ def drop_recording(rec: Recording) -> None:
             print(filepath)
     db_remove(rec)
 
-def update_attribute(recs: list[Recording], check, update) -> None:
+def update_attribute(recs: list[Recording],
+                     check: Callable[[Recording], bool],
+                     update: Callable[[Recording], None]) -> None:
     if len(recs) == 0:
         return
     for r in recs:
         if check(r):
             update(r)
             db_save(r)
-            i = recordings.index(rec)
+            i = recordings.index(r)
             window["recordingBox"].widget.delete(i)
-            window["recordingBox"].widget.insert(i, rec)
+            window["recordingBox"].widget.insert(i, r)
             window["selectionTxt"].update("0 recordings selected")
 
-def get_video_metadata(rec: Recording) -> (int, int, int, int):
+def get_video_metadata(rec: Recording) -> Tuple[int, int, int, int]:
     vid = cv2.VideoCapture(rec.basepath + E2_VIDEO_EXTENSION)
 
     fps    = int(vid.get(cv2.CAP_PROP_FPS))
@@ -204,7 +230,7 @@ def db_init() -> None:
                    is_good BOOL, drop_reason VARCHAR, is_mastered BOOL);
               """)
 
-def db_load(basename: str) -> Recording:
+def db_load(basename: str) -> Optional[Recording]:
     c = database.cursor()
     c.execute("""
               SELECT file_basename, file_size,
@@ -216,7 +242,7 @@ def db_load(basename: str) -> Recording:
               """, (basename, ))
     raw = c.fetchone()
 
-    if raw == None:
+    if raw is None:
         return None
 
     rec = Recording()
@@ -246,7 +272,7 @@ def db_save(rec: Recording) -> None:
 
     database.commit()
 
-def db_remove(rec: Recording):
+def db_remove(rec: Recording) -> None:
     c = database.cursor()
     c.execute("""
               DELETE FROM recordings
@@ -298,7 +324,7 @@ def main(argc: int, argv: list[str]) -> None:
         print(f"Processing recording {i + 1} of {len(filenames)}", end="\r", file=sys.stderr)
         basepath = re.sub("\.ts$", "", f)
         rec = RecordingFactory.from_database(basepath)
-        if rec != None:
+        if rec is not None:
             recordings.append(rec)
             db_count += 1
             continue
