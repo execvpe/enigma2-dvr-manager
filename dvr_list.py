@@ -360,7 +360,7 @@ def main(argc: int, argv: list[str]) -> None:
 
         if len(recordingBox_selected_rec) > 0:
             r = recordingBox_selected_rec[0]
-            window["metaTxt"].update(f"{r.video_width:4d}x{r.video_height:4d}#{r.video_fps} | Drop: {r.drop_reason}")
+            window["metaTxt"].update(f"{r.video_width:4d}x{r.video_height:4d}#{r.video_fps} | Drop Reason: {[s.desc for s in DROP_REASONS if s.key == r.drop_reason][0]}")
             window["selectionTxt"].update(f"{len(recordingBox_selected_rec)} recordings selected")
 
         # [O]pen recording using VLC
