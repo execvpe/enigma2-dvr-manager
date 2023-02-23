@@ -63,8 +63,10 @@ class RecordingFactory:
         rec.video_duration, rec.video_height, rec.video_width, rec.video_fps = get_video_metadata(rec)
         rec.is_good, rec.drop_reason, rec.is_mastered = False, "no", False
 
+        if len(rec.epg_channel) == 0:
+            rec.epg_title = basepath.split(" - ")[1] + "[?]";
         if len(rec.epg_title) == 0:
-            rec.epg_title = "[?] " + basepath.split(" - ")[2]
+            rec.epg_title = basepath.split(" - ")[2] + "[?]"
 
         RecordingFactory.__both(rec)
         return rec
@@ -75,6 +77,8 @@ class RecordingFactory:
         rec = load_from_cache(basename)
         if rec == None:
             return None
+
+        assert rec.file_size == os.stat(basepath + E2_VIDEO_EXTENSION).st_size
 
         rec.basepath = basepath
 
