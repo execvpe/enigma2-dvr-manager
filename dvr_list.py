@@ -194,7 +194,7 @@ def gui_init() -> None:
                               select_mode=sg.LISTBOX_SELECT_MODE_EXTENDED)]]
 
     global window
-    window = sg.Window(title="DVR Duplicates",
+    window = sg.Window(title="DVR Duplicate Removal Tool",
                        layout=gui_layout,
                        return_keyboard_events=True,
                        resizable=True,
