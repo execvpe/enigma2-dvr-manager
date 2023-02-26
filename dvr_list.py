@@ -12,8 +12,13 @@ from typing import Callable, Optional, Tuple
 
 # Enigma 2 video file extension (default: ".ts")
 E2_VIDEO_EXTENSION = ".ts"
+# Enigma 2 meta file extension (default: ".ts.meta")
+E2_META_EXTENSION = ".ts.meta"
 # As far as I know there are six files associated to each recording
 E2_EXTENSIONS = [".eit", ".ts", ".ts.ap", ".ts.cuts", ".ts.meta", ".ts.sc"]
+
+# A file to which the dropped file paths are appended
+DROPPED_FILE = "dropped.paths"
 
 # This class is necessary because sg.Listbox requires objects which have __repr__()
 class Reason:
@@ -128,10 +133,11 @@ def to_GiB(size: int) -> float:
     return size / 1_073_741_824
 
 def drop_recording(rec: Recording) -> None:
-    for e in E2_EXTENSIONS:
-        filepath = rec.basepath + e
-        if os.path.exists(filepath):
-            print(filepath)
+    with open(DROPPED_FILE, "a") as f:
+        for e in E2_EXTENSIONS:
+            filepath = rec.basepath + e
+            if os.path.exists(filepath):
+                print(filepath, file=f)
     db_remove(rec)
 
 def update_attribute(recs: list[Recording],
@@ -322,14 +328,14 @@ def main(argc: int, argv: list[str]) -> None:
     db_count = 0
     for i, f in enumerate(filenames):
         print(f"Processing recording {i + 1} of {len(filenames)}", end="\r", file=sys.stderr)
-        basepath = re.sub("\.ts$", "", f)
+        basepath = re.sub(f"\{E2_VIDEO_EXTENSION}$", "", f)
         rec = RecordingFactory.from_database(basepath)
         if rec is not None:
             recordings.append(rec)
             db_count += 1
             continue
         try:
-            with open(f + ".meta", "r", encoding="utf-8") as m:
+            with open(basepath + E2_META_EXTENSION, "r", encoding="utf-8") as m:
                 rec = RecordingFactory.from_meta_file(basepath, m.readlines())
                 db_save(rec)
                 recordings.append(rec)
