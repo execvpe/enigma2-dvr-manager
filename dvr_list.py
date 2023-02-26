@@ -88,9 +88,9 @@ class RecordingFactory:
         rec.is_good, rec.drop_reason, rec.is_mastered = False, "no", False
 
         if len(rec.epg_channel) == 0:
-            rec.epg_title = basepath.split(" - ")[1] + "[?]";
+            rec.epg_channel = basepath.split(" - ")[1]
         if len(rec.epg_title) == 0:
-            rec.epg_title = basepath.split(" - ")[2] + "[?]"
+            rec.epg_title = basepath.split(" - ")[2]
 
         RecordingFactory.__both(rec)
         return rec
@@ -226,8 +226,8 @@ def db_init() -> None:
               CREATE TABLE IF NOT EXISTS
                 recordings(file_basename VARCHAR PRIMARY KEY, file_size INT,
                   epg_channel VARCHAR, epg_title VARCHAR, epg_description VARCHAR,
-                   video_duration INT, video_height INT, video_width INT, video_fps INT,
-                   is_good BOOL, drop_reason VARCHAR, is_mastered BOOL);
+                  video_duration INT, video_height INT, video_width INT, video_fps INT,
+                  is_good BOOL, drop_reason VARCHAR, is_mastered BOOL);
               """)
 
 def db_load(basename: str) -> Optional[Recording]:
