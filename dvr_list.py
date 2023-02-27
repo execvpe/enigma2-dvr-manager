@@ -8,7 +8,7 @@ import sqlite3
 import subprocess
 import sys
 
-from typing import Callable, Optional, Tuple
+from typing import Callable, Iterator, Optional, Tuple
 
 # Enigma 2 video file extension (default: ".ts")
 E2_VIDEO_EXTENSION = ".ts"
@@ -64,7 +64,8 @@ class Recording:
     is_mastered: bool
     date_str: str
     time_str: str
-    sortkey: str
+    groupkey: str
+    sortkey: int
 
     def __getattributes(rec) -> str:
         return f"{'D' if rec.drop_reason != 'no' else '.'}{'G' if rec.is_good else '.'}{'M' if rec.is_mastered else '.'}"
@@ -91,6 +92,7 @@ class RecordingFactory:
         rec.epg_description = remove_prefix(meta[2].strip(), rec.epg_title).strip()
         rec.video_duration, rec.video_height, rec.video_width, rec.video_fps = get_video_metadata(rec)
         rec.is_good, rec.drop_reason, rec.is_mastered = False, "no", False
+        rec.groupkey  = alphanumeric(rec.epg_title).lower()
 
         if len(rec.epg_channel) == 0:
             rec.epg_channel = basepath.split(" - ")[1]
@@ -120,7 +122,6 @@ class RecordingFactory:
 
         rec.date_str = f"{splitname[0][:4]}-{splitname[0][4:6]}-{splitname[0][6:8]}"
         rec.time_str = f"{splitname[1][:2]}:{splitname[1][2:4]}"
-        rec.sortkey  = alphanumeric(f"{rec.epg_title}{rec.time_str}").lower()
 
 # Remove everything that is not a letter or digit
 def alphanumeric(line: str) -> str:
@@ -233,7 +234,7 @@ def db_init() -> None:
                 recordings(file_basename VARCHAR PRIMARY KEY, file_size INT,
                   epg_channel VARCHAR, epg_title VARCHAR, epg_description VARCHAR,
                   video_duration INT, video_height INT, video_width INT, video_fps INT,
-                  is_good BOOL, drop_reason VARCHAR, is_mastered BOOL);
+                  is_good BOOL, drop_reason VARCHAR, is_mastered BOOL, groupkey VARCHAR);
               """)
 
 def db_load(basename: str) -> Optional[Recording]:
@@ -242,7 +243,7 @@ def db_load(basename: str) -> Optional[Recording]:
               SELECT file_basename, file_size,
                 epg_channel, epg_title, epg_description,
                 video_duration, video_height, video_width, video_fps,
-                is_good, drop_reason, is_mastered
+                is_good, drop_reason, is_mastered, groupkey
               FROM recordings
               WHERE file_basename = ?;
               """, (basename, ))
@@ -256,8 +257,21 @@ def db_load(basename: str) -> Optional[Recording]:
     rec.epg_channel, rec.epg_title, rec.epg_description = raw[2], raw[3], raw[4]
     rec.video_duration, rec.video_height, rec.video_width, rec.video_fps = raw[5], raw[6], raw[7], raw[8]
     rec.is_good, rec.drop_reason, rec.is_mastered = bool(raw[9]), raw[10], bool(raw[11])
+    rec.groupkey = raw[12]
 
     return rec
+
+def db_key_ranks() -> dict[str, int]:
+    c = database.cursor()
+    c.execute("""
+              SELECT groupkey,
+                     ROW_NUMBER() OVER (ORDER BY SUM(file_size) DESC)
+              FROM recordings
+              GROUP BY groupkey
+              ORDER BY groupkey;
+              """)
+
+    return dict(c.fetchall())
 
 def db_save(rec: Recording) -> None:
     db_remove(rec)
@@ -266,15 +280,15 @@ def db_save(rec: Recording) -> None:
               INSERT INTO recordings(file_basename, file_size,
                 epg_channel, epg_title, epg_description,
                 video_duration, video_height, video_width, video_fps,
-                is_good, drop_reason, is_mastered)
+                is_good, drop_reason, is_mastered, groupkey)
               VALUES (?, ?,
                 ?, ?, ?,
                 ?, ?, ?, ?,
-                ?, ?, ?);
+                ?, ?, ?, ?);
               """, (rec.file_basename, rec.file_size,
               rec.epg_channel, rec.epg_title, rec.epg_description,
               rec.video_duration, rec.video_height, rec.video_width, rec.video_fps,
-              rec.is_good, rec.drop_reason, rec.is_mastered))
+              rec.is_good, rec.drop_reason, rec.is_mastered, rec.groupkey))
 
     database.commit()
 
@@ -345,7 +359,12 @@ def main(argc: int, argv: list[str]) -> None:
     print(f"Successfully processed {len(filenames)} recordings. ({db_count} in cache, {len(filenames) - db_count} new)", file=sys.stderr)
 
     print("Sorting...", file=sys.stderr)
+
+    key_ranks = db_key_ranks()
+    for r in recordings:
+        r.sortkey = key_ranks.get(r.groupkey, 0)
     recordings.sort(key=lambda r: r.sortkey)
+
     print("Finished sorting.", file=sys.stderr)
 
     gui_init()
