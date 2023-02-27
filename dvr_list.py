@@ -18,7 +18,7 @@ E2_META_EXTENSION = ".ts.meta"
 E2_EXTENSIONS = [".eit", ".ts", ".ts.ap", ".ts.cuts", ".ts.meta", ".ts.sc"]
 
 # A file to which the dropped file paths are appended
-DROPPED_FILE = "dropped.paths"
+DROPPED_FILE = "dropped"
 
 # This class is necessary because sg.Listbox requires objects which have __repr__()
 class Reason:
