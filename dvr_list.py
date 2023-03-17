@@ -20,34 +20,6 @@ E2_EXTENSIONS = [".eit", ".ts", ".ts.ap", ".ts.cuts", ".ts.meta", ".ts.sc"]
 # A file to which the dropped file paths are appended
 DROPPED_FILE = "dropped"
 
-# This class is necessary because sg.Listbox requires objects which have __repr__()
-class Reason:
-    def __init__(self, key: str, desc: str) -> None:
-        self.key  = key
-        self.desc = desc
-
-    def __repr__(self) -> str:
-        return self.desc
-
-DROP_REASONS = [
-    Reason("no",             "KEEP | NO DROP"),
-
-    Reason("badrecording",   "Bad recording | Empty file | etc."),
-
-    Reason("beginmissing",   "Missing beginning"),
-    Reason("endmissing",     "Missing end"),
-
-    Reason("advertising",    "Advertising banner"),
-    Reason("watermark",      "Watermark"),
-    Reason("mutilated",      "Aired too early | Wrong age restriction"),
-
-    Reason("mastered",       "Already mastered"),
-    Reason("redundant",      "Redundant | Better recording available"),
-
-    Reason("unwanted",       "Unwanted recording"),
-    Reason("unknown",        "Unknown reason"),
-]
-
 class Recording:
     basepath: str
     file_basename: str
@@ -60,7 +32,7 @@ class Recording:
     video_width: int
     video_fps: int
     is_good: bool
-    drop_reason: str
+    is_dropped: str
     is_mastered: bool
     date_str: str
     time_str: str
@@ -68,7 +40,7 @@ class Recording:
     sortkey: int
 
     def __getattributes(rec) -> str:
-        return f"{'D' if rec.drop_reason != 'no' else '.'}{'G' if rec.is_good else '.'}{'M' if rec.is_mastered else '.'}"
+        return f"{'D' if rec.is_dropped else '.'}{'G' if rec.is_good else '.'}{'M' if rec.is_mastered else '.'}"
 
     def __repr__(rec) -> str:
         return f"{rec.__getattributes()} | {rec.date_str} {rec.time_str} | {(to_GiB(rec.file_size)):4.1f} GiB | {(rec.video_duration // 60):3d} min | {rec.epg_channel[:10].ljust(10)} | {rec.epg_title[:42].ljust(42)} | {rec.epg_description}"
@@ -91,7 +63,7 @@ class RecordingFactory:
         rec.epg_channel, rec.epg_title = meta[0].split(":")[-1].strip(), meta[1].strip()
         rec.epg_description = remove_prefix(meta[2].strip(), rec.epg_title).strip()
         rec.video_duration, rec.video_height, rec.video_width, rec.video_fps = get_video_metadata(rec)
-        rec.is_good, rec.drop_reason, rec.is_mastered = False, "no", False
+        rec.is_good, rec.is_dropped, rec.is_mastered = False, False, False
         rec.groupkey  = alphanumeric(rec.epg_title).lower()
 
         if len(rec.epg_channel) == 0:
@@ -177,21 +149,14 @@ def gui_init() -> None:
     gui_layout = [[sg.Column([[sg.Text(key="informationTxt",
                                font=gui_font)],
                               [sg.HorizontalSeparator(color="green")],
-                              [sg.Text("[D]rop / Change reason, [K]eep | [O]pen in VLC | Mark as [G]ood, [B]ad (normal)",
+                              [sg.Text("[D]rop, [K]eep | [O]pen in VLC | Mark as [G]ood, [B]ad (normal)",
                                font=gui_font, text_color="grey")],
                               [sg.HorizontalSeparator(color="green")],
                               [sg.Text(key="metaTxt",
                                font=gui_font, text_color="yellow")],
                               [sg.Text(key="selectionTxt",
                                font=gui_font, text_color="yellow")]
-                             ]), sg.Push(),
-                   sg.Listbox(key="selectionBox",
-                              disabled=True,
-                              values=DROP_REASONS,
-                              size=(64, 12),
-                              font=gui_font,
-                              bind_return_key=True,
-                              select_mode=sg.LISTBOX_SELECT_MODE_BROWSE),
+                             ]), sg.Push(), sg.Text("Dummy"),
                    sg.Push(), sg.Button("Drop", key="dropBtn")],
                   [sg.Listbox(key="recordingBox",
                               values=recordings,
@@ -209,11 +174,10 @@ def gui_init() -> None:
 
     window["recordingBox"].set_focus()
     window["recordingBox"].widget.config(fg="white", bg="black")
-    window["selectionBox"].widget.config(fg="white", bg="black")
 
 def gui_recolor(window: sg.Window) -> None:
     for i, r in enumerate(recordings):
-        if r.drop_reason != "no":
+        if r.is_dropped:
             window["recordingBox"].widget.itemconfig(i, fg="white", bg="red")
             continue
 
@@ -234,7 +198,7 @@ def db_init() -> None:
                 recordings(file_basename VARCHAR PRIMARY KEY, file_size INT,
                   epg_channel VARCHAR, epg_title VARCHAR, epg_description VARCHAR,
                   video_duration INT, video_height INT, video_width INT, video_fps INT,
-                  is_good BOOL, drop_reason VARCHAR, is_mastered BOOL, groupkey VARCHAR);
+                  is_good BOOL, is_dropped BOOL, is_mastered BOOL, groupkey VARCHAR);
               """)
 
 def db_load(basename: str) -> Optional[Recording]:
@@ -243,7 +207,7 @@ def db_load(basename: str) -> Optional[Recording]:
               SELECT file_basename, file_size,
                 epg_channel, epg_title, epg_description,
                 video_duration, video_height, video_width, video_fps,
-                is_good, drop_reason, is_mastered, groupkey
+                is_good, is_dropped, is_mastered, groupkey
               FROM recordings
               WHERE file_basename = ?;
               """, (basename, ))
@@ -256,7 +220,7 @@ def db_load(basename: str) -> Optional[Recording]:
     rec.file_basename, rec.file_size = raw[0], int(raw[1])
     rec.epg_channel, rec.epg_title, rec.epg_description = raw[2], raw[3], raw[4]
     rec.video_duration, rec.video_height, rec.video_width, rec.video_fps = raw[5], raw[6], raw[7], raw[8]
-    rec.is_good, rec.drop_reason, rec.is_mastered = bool(raw[9]), raw[10], bool(raw[11])
+    rec.is_good, rec.is_dropped, rec.is_mastered = bool(raw[9]), raw[10], bool(raw[11])
     rec.groupkey = raw[12]
 
     return rec
@@ -280,7 +244,7 @@ def db_save(rec: Recording) -> None:
               INSERT INTO recordings(file_basename, file_size,
                 epg_channel, epg_title, epg_description,
                 video_duration, video_height, video_width, video_fps,
-                is_good, drop_reason, is_mastered, groupkey)
+                is_good, is_dropped, is_mastered, groupkey)
               VALUES (?, ?,
                 ?, ?, ?,
                 ?, ?, ?, ?,
@@ -288,7 +252,7 @@ def db_save(rec: Recording) -> None:
               """, (rec.file_basename, rec.file_size,
               rec.epg_channel, rec.epg_title, rec.epg_description,
               rec.video_duration, rec.video_height, rec.video_width, rec.video_fps,
-              rec.is_good, rec.drop_reason, rec.is_mastered, rec.groupkey))
+              rec.is_good, rec.is_dropped, rec.is_mastered, rec.groupkey))
 
     database.commit()
 
@@ -370,7 +334,7 @@ def main(argc: int, argv: list[str]) -> None:
     gui_init()
 
     while True:
-        selected_recodings = [r for r in recordings if r.drop_reason != "no"]
+        selected_recodings = [r for r in recordings if r.is_dropped]
         good_recodings = [r for r in recordings if r.is_good]
 
         window["informationTxt"].update(f"{len(selected_recodings)} item(s) (approx. {to_GiB(sum([r.file_size for r in selected_recodings])):.1f} GiB) selected for drop | {len(good_recodings)} recordings good | {len(recordings)} total")
@@ -385,7 +349,7 @@ def main(argc: int, argv: list[str]) -> None:
 
         if len(recordingBox_selected_rec) > 0:
             r = recordingBox_selected_rec[0]
-            window["metaTxt"].update(f"{r.video_width:4d}x{r.video_height:4d}#{r.video_fps} | Drop Reason: {[s.desc for s in DROP_REASONS if s.key == r.drop_reason][0]}")
+            window["metaTxt"].update(f"{r.video_width:4d}x{r.video_height:4d}#{r.video_fps}")
             window["selectionTxt"].update(f"{len(recordingBox_selected_rec)} recordings selected")
 
         # [O]pen recording using VLC
@@ -395,6 +359,46 @@ def main(argc: int, argv: list[str]) -> None:
 
         # Select for [D]rop or change reason
         if event == "d:40":
+            update_attribute(recordingBox_selected_rec,
+                             lambda r: not r.is_mastered,
+                             lambda r: setattr(r, "is_dropped", True))
+            continue
+
+        # [K]eep from Drop
+        if event == "k:45":
+            update_attribute(recordingBox_selected_rec,
+                             lambda r: r.is_dropped ,
+                             lambda r: setattr(r, "is_dropped", False))
+            continue
+
+        # Mark recording as [G]ood
+        if event == "g:42":
+            update_attribute(recordingBox_selected_rec,
+                             lambda r: not r.is_good,
+                             lambda r: setattr(r, "is_good", True))
+            continue
+
+        # Mark recording as [B]ad (normal)
+        if event == "b:56":
+            update_attribute(recordingBox_selected_rec,
+                             lambda r: r.is_good,
+                             lambda r: setattr(r, "is_good", False))
+            continue
+
+        # Drop button pressed
+        if event == "dropBtn":
+            for_deletion = set()
+            for r in [x for x in recordings if x.is_dropped]:
+                drop_recording(r)
+                for_deletion.add(r)
+            for r in for_deletion:
+                recordings.remove(r)
+            window["recordingBox"].update(recordings)
+
+if __name__ == "__main__":
+    main(len(sys.argv), sys.argv)
+
+"""
             window["recordingBox"].update(disabled=True)
             window["dropBtn"].update(disabled=True)
             window["metaTxt"].update("Please choose a drop reason!")
@@ -417,36 +421,4 @@ def main(argc: int, argv: list[str]) -> None:
             window["metaTxt"].update("")
             window["recordingBox"].update(disabled=False)
             window["recordingBox"].set_focus()
-
-            update_attribute(recordingBox_selected_rec,
-                             lambda r: not r.is_mastered,
-                             lambda r: setattr(r, "drop_reason", reason_key))
-            continue
-
-        # [K]eep from Drop
-        if event == "k:45":
-            update_attribute(recordingBox_selected_rec, lambda r: r.drop_reason != "no", lambda r: setattr(r, "drop_reason", "no"))
-            continue
-
-        # Mark recording as [G]ood
-        if event == "g:42":
-            update_attribute(recordingBox_selected_rec, lambda r: not r.is_good, lambda r: setattr(r, "is_good", True))
-            continue
-
-        # Mark recording as [B]ad (normal)
-        if event == "b:56":
-            update_attribute(recordingBox_selected_rec, lambda r: r.is_good, lambda r: setattr(r, "is_good", False))
-            continue
-
-        # Drop button pressed
-        if event == "dropBtn":
-            for_deletion = set()
-            for r in [x for x in recordings if x.drop_reason != "no"]:
-                drop_recording(r)
-                for_deletion.add(r)
-            for r in for_deletion:
-                recordings.remove(r)
-            window["recordingBox"].update(recordings)
-
-if __name__ == "__main__":
-    main(len(sys.argv), sys.argv)
+"""
