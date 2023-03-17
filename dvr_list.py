@@ -41,7 +41,7 @@ class Recording:
     comment: str
 
     def __getattributes(rec) -> str:
-        return f"{'D' if rec.is_dropped else '.'}{'G' if rec.is_good else '.'}{'M' if rec.is_mastered else '.'}"
+        return f"{'D' if rec.is_dropped else '.'}{'G' if rec.is_good else '.'}{'M' if rec.is_mastered else '.'}{'C' if len(rec.comment) > 0 else '.'}"
 
     def __repr__(rec) -> str:
         return f"{rec.__getattributes()} | {rec.date_str} {rec.time_str} | {(to_GiB(rec.file_size)):4.1f} GiB | {(rec.video_duration // 60):3d} min | {rec.epg_channel[:10].ljust(10)} | {rec.epg_title[:42].ljust(42)} | {rec.epg_description}"
@@ -380,15 +380,15 @@ def main(argc: int, argv: list[str]) -> None:
                     continue
 
                 comment = window["commentMul"].get()
-                update_attribute(recordingBox_selected_rec,
-                                 lambda r: True,
-                                 lambda r: setattr(r, "comment", comment))
                 break
 
             window["commentMul"].update(disabled=True)
             window["dropBtn"].update(disabled=False)
             window["metaTxt"].update("SELECT Mode")
             window["recordingBox"].update(disabled=False)
+            update_attribute(recordingBox_selected_rec,
+                             lambda r: True,
+                             lambda r: setattr(r, "comment", comment))
             window["recordingBox"].set_focus()
             continue
 
