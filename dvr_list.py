@@ -38,6 +38,7 @@ class Recording:
     time_str: str
     groupkey: str
     sortkey: int
+    comment: str
 
     def __getattributes(rec) -> str:
         return f"{'D' if rec.is_dropped else '.'}{'G' if rec.is_good else '.'}{'M' if rec.is_mastered else '.'}"
@@ -65,6 +66,7 @@ class RecordingFactory:
         rec.video_duration, rec.video_height, rec.video_width, rec.video_fps = get_video_metadata(rec)
         rec.is_good, rec.is_dropped, rec.is_mastered = False, False, False
         rec.groupkey  = alphanumeric(rec.epg_title).lower()
+        rec.comment = ""
 
         if len(rec.epg_channel) == 0:
             rec.epg_channel = basepath.split(" - ")[1]
@@ -149,14 +151,19 @@ def gui_init() -> None:
     gui_layout = [[sg.Column([[sg.Text(key="informationTxt",
                                font=gui_font)],
                               [sg.HorizontalSeparator(color="green")],
-                              [sg.Text("[D]rop, [K]eep | [O]pen in VLC | Mark as [G]ood, [B]ad (normal)",
+                              [sg.Text("[D]rop, [K]eep | [O]pen in VLC | Mark as [G]ood, [B]ad (normal) | [C]omment",
                                font=gui_font, text_color="grey")],
                               [sg.HorizontalSeparator(color="green")],
-                              [sg.Text(key="metaTxt",
+                              [sg.Text("SELECT Mode", key="metaTxt",
                                font=gui_font, text_color="yellow")],
                               [sg.Text(key="selectionTxt",
                                font=gui_font, text_color="yellow")]
-                             ]), sg.Push(), sg.Text("Dummy"),
+                             ]),
+                   sg.Push(),
+                   sg.Multiline(key="commentMul",
+                                size=(80, 6),
+                                font=gui_font,
+                                disabled=True),
                    sg.Push(), sg.Button("Drop", key="dropBtn")],
                   [sg.Listbox(key="recordingBox",
                               values=recordings,
@@ -174,6 +181,7 @@ def gui_init() -> None:
 
     window["recordingBox"].set_focus()
     window["recordingBox"].widget.config(fg="white", bg="black")
+    window["commentMul"].widget.config(fg="white", bg="black")
 
 def gui_recolor(window: sg.Window) -> None:
     for i, r in enumerate(recordings):
@@ -195,10 +203,10 @@ def db_init() -> None:
     c = database.cursor()
     c.execute("""
               CREATE TABLE IF NOT EXISTS
-                recordings(file_basename VARCHAR PRIMARY KEY, file_size INT,
+                recordings(file_basename VARCHAR PRIMARY KEY, groupkey VARCHAR, file_size INT,
                   epg_channel VARCHAR, epg_title VARCHAR, epg_description VARCHAR,
                   video_duration INT, video_height INT, video_width INT, video_fps INT,
-                  is_good BOOL, is_dropped BOOL, is_mastered BOOL, groupkey VARCHAR);
+                  is_good BOOL, is_dropped BOOL, is_mastered BOOL, comment VARCHAR);
               """)
 
 def db_load(basename: str) -> Optional[Recording]:
@@ -207,7 +215,7 @@ def db_load(basename: str) -> Optional[Recording]:
               SELECT file_basename, file_size,
                 epg_channel, epg_title, epg_description,
                 video_duration, video_height, video_width, video_fps,
-                is_good, is_dropped, is_mastered, groupkey
+                is_good, is_dropped, is_mastered, groupkey, comment
               FROM recordings
               WHERE file_basename = ?;
               """, (basename, ))
@@ -221,7 +229,7 @@ def db_load(basename: str) -> Optional[Recording]:
     rec.epg_channel, rec.epg_title, rec.epg_description = raw[2], raw[3], raw[4]
     rec.video_duration, rec.video_height, rec.video_width, rec.video_fps = raw[5], raw[6], raw[7], raw[8]
     rec.is_good, rec.is_dropped, rec.is_mastered = bool(raw[9]), raw[10], bool(raw[11])
-    rec.groupkey = raw[12]
+    rec.groupkey, rec.comment = raw[12], raw[13]
 
     return rec
 
@@ -244,15 +252,15 @@ def db_save(rec: Recording) -> None:
               INSERT INTO recordings(file_basename, file_size,
                 epg_channel, epg_title, epg_description,
                 video_duration, video_height, video_width, video_fps,
-                is_good, is_dropped, is_mastered, groupkey)
+                is_good, is_dropped, is_mastered, groupkey, comment)
               VALUES (?, ?,
                 ?, ?, ?,
                 ?, ?, ?, ?,
-                ?, ?, ?, ?);
+                ?, ?, ?, ?, ?);
               """, (rec.file_basename, rec.file_size,
               rec.epg_channel, rec.epg_title, rec.epg_description,
               rec.video_duration, rec.video_height, rec.video_width, rec.video_fps,
-              rec.is_good, rec.is_dropped, rec.is_mastered, rec.groupkey))
+              rec.is_good, rec.is_dropped, rec.is_mastered, rec.groupkey, rec.comment))
 
     database.commit()
 
@@ -351,6 +359,38 @@ def main(argc: int, argv: list[str]) -> None:
             r = recordingBox_selected_rec[0]
             window["metaTxt"].update(f"{r.video_width:4d}x{r.video_height:4d}#{r.video_fps}")
             window["selectionTxt"].update(f"{len(recordingBox_selected_rec)} recordings selected")
+            window["commentMul"].update(recordingBox_selected_rec[0].comment)
+
+        # [C]omment
+        if ((event == "c:54" and len(recordingBox_selected_rec) == 1)
+        or ( event == "C:54" and len(recordingBox_selected_rec) >  0)):
+            window["recordingBox"].update(disabled=True)
+            window["dropBtn"].update(disabled=True)
+            window["metaTxt"].update("COMMENT Mode | Submit: [ESC]")
+            window["commentMul"].update(disabled=False)
+            window["commentMul"].set_focus()
+
+            while True:
+                event, _ = window.read()
+
+                if event == sg.WIN_CLOSED:
+                    quit()
+
+                if event != "Escape:9":
+                    continue
+
+                comment = window["commentMul"].get()
+                update_attribute(recordingBox_selected_rec,
+                                 lambda r: True,
+                                 lambda r: setattr(r, "comment", comment))
+                break
+
+            window["commentMul"].update(disabled=True)
+            window["dropBtn"].update(disabled=False)
+            window["metaTxt"].update("SELECT Mode")
+            window["recordingBox"].update(disabled=False)
+            window["recordingBox"].set_focus()
+            continue
 
         # [O]pen recording using VLC
         if event == "o:32" and len(recordingBox_selected_rec) > 0:
@@ -397,28 +437,3 @@ def main(argc: int, argv: list[str]) -> None:
 
 if __name__ == "__main__":
     main(len(sys.argv), sys.argv)
-
-"""
-            window["recordingBox"].update(disabled=True)
-            window["dropBtn"].update(disabled=True)
-            window["metaTxt"].update("Please choose a drop reason!")
-            window["selectionBox"].update(disabled=False)
-            window["selectionBox"].set_focus()
-
-            while True:
-                event, _ = window.read()
-
-                if event != "selectionBox":
-                    continue
-
-                items = window["selectionBox"].get()
-                if len(items) == 1:
-                    reason_key = items[0].key
-                    break
-
-            window["selectionBox"].update(disabled=True)
-            window["dropBtn"].update(disabled=False)
-            window["metaTxt"].update("")
-            window["recordingBox"].update(disabled=False)
-            window["recordingBox"].set_focus()
-"""
