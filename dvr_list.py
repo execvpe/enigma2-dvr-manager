@@ -175,7 +175,7 @@ def gui_init() -> None:
     gui_layout = [[sg.Column([[sg.Text(key="informationTxt",
                                font=gui_font)],
                               [sg.HorizontalSeparator(color="green")],
-                              [sg.Text("[D]rop, [K]eep | [O]pen in VLC | Mark as [G]ood, [B]ad (normal) | [C]omment",
+                              [sg.Text("[O]pen in VLC | [C]omment | [D]rop | [G]ood | [M]astered | Undo: [Shift + 'Key']",
                                font=gui_font, text_color="grey")],
                               [sg.HorizontalSeparator(color="green")],
                               [sg.Text("Order by", font=gui_font, text_color="grey"),
@@ -377,6 +377,7 @@ def main(argc: int, argv: list[str]) -> None:
     while True:
         selected_recodings = [r for r in recordings if r.is_dropped]
         good_recodings = [r for r in recordings if r.is_good]
+        mastered_recodings = [r for r in recordings if r.is_mastered]
 
         selected_radios = tuple(cast(str, r.metadata) for r in window.element_list() if isinstance(r, sg.Radio) and r.get())
         if selected_radios[0] in ("ASC", "DESC"):
@@ -387,7 +388,7 @@ def main(argc: int, argv: list[str]) -> None:
             window["recordingBox"].update(recordings)
             last_order = selected_radios
 
-        window["informationTxt"].update(f"{len(selected_recodings)} item(s) (approx. {to_GiB(sum([r.file_size for r in selected_recodings])):.1f} GiB) selected for drop | {len(good_recodings)} recordings good | {len(recordings)} total")
+        window["informationTxt"].update(f"{len(selected_recodings)} item(s) (approx. {to_GiB(sum([r.file_size for r in selected_recodings])):.1f} GiB) selected for drop | {len(good_recodings)} recordings good | {len(mastered_recodings)} mastered | {len(recordings)} total")
 
         gui_recolor(window)
         event, _ = window.read()
@@ -439,15 +440,14 @@ def main(argc: int, argv: list[str]) -> None:
             subprocess.Popen(["/usr/bin/env", "vlc", recordingBox_selected_rec[0].basepath + E2_VIDEO_EXTENSION])
             continue
 
-        # Select for [D]rop or change reason
+        # Select for [D]rop
         if event == "d:40":
             update_attribute(recordingBox_selected_rec,
                              lambda r: not r.is_mastered,
                              lambda r: setattr(r, "is_dropped", True))
             continue
 
-        # [K]eep from Drop
-        if event == "k:45":
+        if event == "D:40":
             update_attribute(recordingBox_selected_rec,
                              lambda r: r.is_dropped ,
                              lambda r: setattr(r, "is_dropped", False))
@@ -460,11 +460,23 @@ def main(argc: int, argv: list[str]) -> None:
                              lambda r: setattr(r, "is_good", True))
             continue
 
-        # Mark recording as [B]ad (normal)
-        if event == "b:56":
+        if event == "G:42":
             update_attribute(recordingBox_selected_rec,
                              lambda r: r.is_good,
                              lambda r: setattr(r, "is_good", False))
+            continue
+
+        # Mark recording as [M]astered
+        if event == "m:58":
+            update_attribute(recordingBox_selected_rec,
+                             lambda r: not r.is_dropped,
+                             lambda r: setattr(r, "is_mastered", True))
+            continue
+
+        if event == "M:58":
+            update_attribute(recordingBox_selected_rec,
+                             lambda r: r.is_mastered,
+                             lambda r: setattr(r, "is_mastered", False))
             continue
 
         # Drop button pressed
