@@ -67,19 +67,19 @@ class RecordingFactory:
         rec.epg_description = remove_prefix(meta[2].strip(), rec.epg_title).strip()
         rec.video_duration, rec.video_height, rec.video_width, rec.video_fps = get_video_metadata(rec)
         rec.is_good, rec.is_dropped, rec.is_mastered = False, False, False
-        rec.groupkey  = alphanumeric(rec.epg_title).lower()
+        rec.groupkey  = make_groupkey(rec.epg_title)
         rec.comment = ""
 
-        basepath_tokens = basepath.split(" - ")
+        basename_tokens = rec.file_basename.split(" - ")
 
         rec.timestamp = datetime.strftime(
-            datetime.strptime(basepath_tokens[0], "%Y%m%d %H%M"),
+            datetime.strptime(basename_tokens[0], "%Y%m%d %H%M"),
             "%Y-%m-%d %H:%M")
 
         if len(rec.epg_channel) == 0:
-            rec.epg_channel = basepath_tokens[1]
+            rec.epg_channel = basename_tokens[1]
         if len(rec.epg_title) == 0:
-            rec.epg_title = basepath_tokens[2]
+            rec.epg_title = basename_tokens[2]
 
         RecordingFactory.__both(rec)
         return rec
@@ -106,8 +106,18 @@ class RecordingFactory:
         rec.time_str = f"{splitname[1][:2]}:{splitname[1][2:4]}"
 
 # Remove everything that is not a letter or digit
-def alphanumeric(line: str) -> str:
-    return re.sub("[^A-Za-z0-9]+", "", line)
+def make_groupkey(line: str) -> str:
+    # Add some more translations if desired
+    translations = {
+        "ä": "ae",
+        "ö": "oe",
+        "ü": "ue",
+        "ß": "ss"
+    }
+
+    return re.sub("[^a-z0-9]+", "",
+                  line.lower()
+                      .translate(str.maketrans(translations)))
 
 def remove_prefix(line: str, prefix: str) -> str:
     return re.sub(f"^{re.escape(prefix)}", "", line)
