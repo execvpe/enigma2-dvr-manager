@@ -8,6 +8,7 @@ import sqlite3
 import subprocess
 import sys
 
+from datetime import datetime
 from typing import Callable, Iterator, Optional, Tuple
 
 # Enigma 2 video file extension (default: ".ts")
@@ -39,6 +40,7 @@ class Recording:
     groupkey: str
     sortkey: int
     comment: str
+    timestamp: str
 
     def __getattributes(rec) -> str:
         return f"{'D' if rec.is_dropped else '.'}{'G' if rec.is_good else '.'}{'M' if rec.is_mastered else '.'}{'C' if len(rec.comment) > 0 else '.'}"
@@ -68,10 +70,16 @@ class RecordingFactory:
         rec.groupkey  = alphanumeric(rec.epg_title).lower()
         rec.comment = ""
 
+        basepath_tokens = basepath.split(" - ")
+
+        rec.timestamp = datetime.strftime(
+            datetime.strptime(basepath_tokens[0], "%Y%m%d %H%M"),
+            "%Y-%m-%d %H:%M")
+
         if len(rec.epg_channel) == 0:
-            rec.epg_channel = basepath.split(" - ")[1]
+            rec.epg_channel = basepath_tokens[1]
         if len(rec.epg_title) == 0:
-            rec.epg_title = basepath.split(" - ")[2]
+            rec.epg_title = basepath_tokens[2]
 
         RecordingFactory.__both(rec)
         return rec
@@ -115,6 +123,12 @@ def drop_recording(rec: Recording) -> None:
                 print(filepath, file=f)
     db_remove(rec)
 
+def sort_recordings(order: (str, str)) -> None:
+    key_ranks = db_key_ranks(" ".join(order))
+    for r in recordings:
+        r.sortkey = key_ranks.get(r.groupkey, 0)
+    recordings.sort(key=lambda r: r.sortkey)
+
 def update_attribute(recs: list[Recording],
                      check: Callable[[Recording], bool],
                      update: Callable[[Recording], None]) -> None:
@@ -127,7 +141,7 @@ def update_attribute(recs: list[Recording],
             i = recordings.index(r)
             window["recordingBox"].widget.delete(i)
             window["recordingBox"].widget.insert(i, r)
-            window["selectionTxt"].update("0 recordings selected")
+            window["selectionTxt"].update("")
 
 def get_video_metadata(rec: Recording) -> Tuple[int, int, int, int]:
     vid = cv2.VideoCapture(rec.basepath + E2_VIDEO_EXTENSION)
@@ -154,17 +168,27 @@ def gui_init() -> None:
                               [sg.Text("[D]rop, [K]eep | [O]pen in VLC | Mark as [G]ood, [B]ad (normal) | [C]omment",
                                font=gui_font, text_color="grey")],
                               [sg.HorizontalSeparator(color="green")],
-                              [sg.Text("SELECT Mode", key="metaTxt",
-                               font=gui_font, text_color="yellow")],
-                              [sg.Text(key="selectionTxt",
-                               font=gui_font, text_color="yellow")]
-                             ]),
+                              [sg.Text("Order by", font=gui_font, text_color="grey"),
+                               sg.Radio("Title", "sortRadio", font=gui_font, enable_events=True, default=True, metadata="groupkey"),
+                               sg.Radio("Channel", "sortRadio", font=gui_font, enable_events=True, metadata="epg_channel"),
+                               sg.Radio("Date", "sortRadio", font=gui_font, enable_events=True, metadata="timestamp"),
+                               sg.Radio("AVG(size)", "sortRadio", font=gui_font, enable_events=True, metadata="AVG(file_size)"),
+                               sg.Radio("MAX(size)", "sortRadio", font=gui_font, enable_events=True, metadata="MAX(file_size)"),
+                               sg.Radio("SUM(size)", "sortRadio", font=gui_font, enable_events=True, metadata="SUM(file_size)"),
+                               sg.Radio("COUNT", "sortRadio", font=gui_font, enable_events=True, metadata="COUNT(*)"),
+                               sg.Push(), sg.VerticalSeparator(color="green"),
+                               sg.Radio("ASC", "orderRadio", font=gui_font, enable_events=True, default=True, metadata="ASC"),
+                               sg.Radio("DESC", "orderRadio", font=gui_font, enable_events=True, metadata="DESC"),],
+                              [sg.HorizontalSeparator(color="green")],
+                              [sg.Text("SELECT Mode", key="metaTxt", font=gui_font, text_color="yellow"),
+                               sg.VerticalSeparator(color="green"),
+                               sg.Text(key="selectionTxt", font=gui_font, text_color="yellow"),
+                               sg.Push(), sg.Button("Drop", key="dropBtn")],]),
                    sg.Push(),
                    sg.Multiline(key="commentMul",
                                 size=(80, 6),
                                 font=gui_font,
-                                disabled=True),
-                   sg.Push(), sg.Button("Drop", key="dropBtn")],
+                                disabled=True)],
                   [sg.Listbox(key="recordingBox",
                               values=recordings,
                               size=(1280, 720),
@@ -203,7 +227,8 @@ def db_init() -> None:
     c = database.cursor()
     c.execute("""
               CREATE TABLE IF NOT EXISTS
-                recordings(file_basename VARCHAR PRIMARY KEY, groupkey VARCHAR, file_size INT,
+                recordings(file_basename VARCHAR PRIMARY KEY, groupkey VARCHAR,
+                  timestamp DATETIME, file_size INT,
                   epg_channel VARCHAR, epg_title VARCHAR, epg_description VARCHAR,
                   video_duration INT, video_height INT, video_width INT, video_fps INT,
                   is_good BOOL, is_dropped BOOL, is_mastered BOOL, comment VARCHAR);
@@ -215,7 +240,7 @@ def db_load(basename: str) -> Optional[Recording]:
               SELECT file_basename, file_size,
                 epg_channel, epg_title, epg_description,
                 video_duration, video_height, video_width, video_fps,
-                is_good, is_dropped, is_mastered, groupkey, comment
+                is_good, is_dropped, is_mastered, groupkey, comment, timestamp
               FROM recordings
               WHERE file_basename = ?;
               """, (basename, ))
@@ -230,14 +255,16 @@ def db_load(basename: str) -> Optional[Recording]:
     rec.video_duration, rec.video_height, rec.video_width, rec.video_fps = raw[5], raw[6], raw[7], raw[8]
     rec.is_good, rec.is_dropped, rec.is_mastered = bool(raw[9]), raw[10], bool(raw[11])
     rec.groupkey, rec.comment = raw[12], raw[13]
+    rec.timestamp = raw[14]
 
     return rec
 
-def db_key_ranks() -> dict[str, int]:
+def db_key_ranks(order_by: str) -> dict[str, int]:
     c = database.cursor()
-    c.execute("""
+    # Yes, this is vulnerable to SQL injections, but the tuple solution does not work here
+    c.execute(f"""
               SELECT groupkey,
-                     ROW_NUMBER() OVER (ORDER BY SUM(file_size) DESC)
+                     ROW_NUMBER() OVER (ORDER BY {order_by})
               FROM recordings
               GROUP BY groupkey
               ORDER BY groupkey;
@@ -252,15 +279,18 @@ def db_save(rec: Recording) -> None:
               INSERT INTO recordings(file_basename, file_size,
                 epg_channel, epg_title, epg_description,
                 video_duration, video_height, video_width, video_fps,
-                is_good, is_dropped, is_mastered, groupkey, comment)
+                is_good, is_dropped, is_mastered, groupkey,
+                comment, timestamp)
               VALUES (?, ?,
                 ?, ?, ?,
                 ?, ?, ?, ?,
-                ?, ?, ?, ?, ?);
+                ?, ?, ?, ?,
+                ?, ?);
               """, (rec.file_basename, rec.file_size,
               rec.epg_channel, rec.epg_title, rec.epg_description,
               rec.video_duration, rec.video_height, rec.video_width, rec.video_fps,
-              rec.is_good, rec.is_dropped, rec.is_mastered, rec.groupkey, rec.comment))
+              rec.is_good, rec.is_dropped, rec.is_mastered, rec.groupkey,
+              rec.comment, rec.timestamp))
 
     database.commit()
 
@@ -330,20 +360,22 @@ def main(argc: int, argv: list[str]) -> None:
 
     print(f"Successfully processed {len(filenames)} recordings. ({db_count} in cache, {len(filenames) - db_count} new)", file=sys.stderr)
 
-    print("Sorting...", file=sys.stderr)
-
-    key_ranks = db_key_ranks()
-    for r in recordings:
-        r.sortkey = key_ranks.get(r.groupkey, 0)
-    recordings.sort(key=lambda r: r.sortkey)
-
-    print("Finished sorting.", file=sys.stderr)
-
+    last_order = ("groupkey", "ASC")
+    sort_recordings(last_order)
     gui_init()
 
     while True:
         selected_recodings = [r for r in recordings if r.is_dropped]
         good_recodings = [r for r in recordings if r.is_good]
+
+        selected_radios = tuple(r.metadata for r in window.element_list() if isinstance(r, sg.Radio) and r.get())
+        if selected_radios[0] in ("ASC", "DESC"):
+            selected_radios = selected_radios[::-1]
+
+        if selected_radios != last_order:
+            sort_recordings(selected_radios)
+            window["recordingBox"].update(recordings)
+            last_order = selected_radios
 
         window["informationTxt"].update(f"{len(selected_recodings)} item(s) (approx. {to_GiB(sum([r.file_size for r in selected_recodings])):.1f} GiB) selected for drop | {len(good_recodings)} recordings good | {len(recordings)} total")
 
@@ -357,8 +389,8 @@ def main(argc: int, argv: list[str]) -> None:
 
         if len(recordingBox_selected_rec) > 0:
             r = recordingBox_selected_rec[0]
-            window["metaTxt"].update(f"{r.video_width:4d}x{r.video_height:4d}#{r.video_fps}")
-            window["selectionTxt"].update(f"{len(recordingBox_selected_rec)} recordings selected")
+            window["metaTxt"].update(f"{r.video_width:4d}x{r.video_height:4d} @ {r.video_fps} fps")
+            window["selectionTxt"].update(f"{len(recordingBox_selected_rec)} recording(s) under cursor")
             window["commentMul"].update(recordingBox_selected_rec[0].comment)
 
         # [C]omment
