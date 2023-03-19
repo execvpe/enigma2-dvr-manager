@@ -35,8 +35,6 @@ class Recording:
     is_good: bool
     is_dropped: bool
     is_mastered: bool
-    date_str: str
-    time_str: str
     groupkey: str
     sortkey: int
     comment: str
@@ -46,7 +44,7 @@ class Recording:
         return f"{'D' if rec.is_dropped else '.'}{'G' if rec.is_good else '.'}{'M' if rec.is_mastered else '.'}{'C' if len(rec.comment) > 0 else '.'}"
 
     def __repr__(rec) -> str:
-        return f"{rec.__getattributes()} | {rec.date_str} {rec.time_str} | {(to_GiB(rec.file_size)):4.1f} GiB | {(rec.video_duration // 60):3d} min | {rec.epg_channel[:10].ljust(10)} | {rec.epg_title[:42].ljust(42)} | {rec.epg_description}"
+        return f"{rec.__getattributes()} | {rec.timestamp} | {(to_GiB(rec.file_size)):4.1f} GiB | {(rec.video_duration // 60):3d} min | {rec.epg_channel[:10].ljust(10)} | {rec.epg_title[:42].ljust(42)} | {rec.epg_description}"
 
 # Recording objects
 recordings: list[Recording] = []
@@ -81,7 +79,6 @@ class RecordingFactory:
         if len(rec.epg_title) == 0:
             rec.epg_title = basename_tokens[2]
 
-        RecordingFactory.__both(rec)
         return rec
 
     @staticmethod
@@ -95,15 +92,7 @@ class RecordingFactory:
 
         rec.basepath = basepath
 
-        RecordingFactory.__both(rec)
         return rec
-
-    @staticmethod
-    def __both(rec: Recording) -> None:
-        splitname = rec.file_basename.split(" ")
-
-        rec.date_str = f"{splitname[0][:4]}-{splitname[0][4:6]}-{splitname[0][6:8]}"
-        rec.time_str = f"{splitname[1][:2]}:{splitname[1][2:4]}"
 
 # Remove everything that is not a letter or digit
 def make_groupkey(line: str) -> str:
