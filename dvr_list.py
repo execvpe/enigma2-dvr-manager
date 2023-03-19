@@ -9,7 +9,7 @@ import subprocess
 import sys
 
 from datetime import datetime
-from typing import Callable, Iterator, Optional, Tuple
+from typing import cast, Callable, Iterator, Optional, Tuple
 
 # Enigma 2 video file extension (default: ".ts")
 E2_VIDEO_EXTENSION = ".ts"
@@ -33,7 +33,7 @@ class Recording:
     video_width: int
     video_fps: int
     is_good: bool
-    is_dropped: str
+    is_dropped: bool
     is_mastered: bool
     date_str: str
     time_str: str
@@ -123,7 +123,7 @@ def drop_recording(rec: Recording) -> None:
                 print(filepath, file=f)
     db_remove(rec)
 
-def sort_recordings(order: (str, str)) -> None:
+def sort_recordings(order: Tuple[str, str]) -> None:
     key_ranks = db_key_ranks(" ".join(order))
     for r in recordings:
         r.sortkey = key_ranks.get(r.groupkey, 0)
@@ -368,7 +368,7 @@ def main(argc: int, argv: list[str]) -> None:
         selected_recodings = [r for r in recordings if r.is_dropped]
         good_recodings = [r for r in recordings if r.is_good]
 
-        selected_radios = tuple(r.metadata for r in window.element_list() if isinstance(r, sg.Radio) and r.get())
+        selected_radios = tuple(cast(str, r.metadata) for r in window.element_list() if isinstance(r, sg.Radio) and r.get())
         if selected_radios[0] in ("ASC", "DESC"):
             selected_radios = selected_radios[::-1]
 
