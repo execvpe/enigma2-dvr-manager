@@ -21,6 +21,9 @@ E2_EXTENSIONS = [".eit", ".ts", ".ts.ap", ".ts.cuts", ".ts.meta", ".ts.sc"]
 # A file to which the dropped file paths are appended
 DROPPED_FILE = "dropped"
 
+# The default GUI font
+GUI_FONT = ("JetBrains Mono", 14)
+
 class Recording:
     basepath: str
     file_basename: str
@@ -159,44 +162,42 @@ def get_video_metadata(rec: Recording) -> Tuple[int, int, int, int]:
 def gui_init() -> None:
     sg.ChangeLookAndFeel("Dark Black")
 
-    gui_font = ("JetBrains Mono", 14)
-
     gui_layout = [[sg.Column([[sg.Text(key="informationTxt",
-                               font=gui_font)],
+                               font=GUI_FONT)],
                               [sg.HorizontalSeparator(color="green")],
                               [sg.Text("[O]pen in VLC | [C]omment | [D]rop | [G]ood | [M]astered | Undo: [Shift + 'Key']",
-                               font=gui_font, text_color="grey")],
+                               font=GUI_FONT, text_color="grey")],
                               [sg.HorizontalSeparator(color="green")],
-                              [sg.Text("Order by", font=gui_font, text_color="grey"), sg.Column([
+                              [sg.Text("Order by", font=GUI_FONT, text_color="grey"), sg.Column([
                                #FIXME: Passing attributes without an aggregate function is undefined and results in garbage ordering
-                              [sg.Radio("Title", "sortRadio", font=gui_font, enable_events=True, default=True, metadata="groupkey"),
-                               sg.Radio("Channel", "sortRadio", font=gui_font, enable_events=True, metadata="epg_channel"),
-                               sg.Radio("Date", "sortRadio", font=gui_font, enable_events=True, metadata="timestamp")],
-                              [sg.Radio("COUNT", "sortRadio", font=gui_font, enable_events=True, metadata="COUNT(*)"),
-                               sg.Radio("AVG(size)", "sortRadio", font=gui_font, enable_events=True, metadata="AVG(file_size)"),
-                               sg.Radio("MAX(size)", "sortRadio", font=gui_font, enable_events=True, metadata="MAX(file_size)"),
-                               sg.Radio("SUM(size)", "sortRadio", font=gui_font, enable_events=True, metadata="SUM(file_size)"),
-                               sg.Radio("drop", "sortRadio", font=gui_font, enable_events=True, metadata="MAX(is_dropped)"),
-                               sg.Radio("good", "sortRadio", font=gui_font, enable_events=True, metadata="MAX(is_good)"),
-                               sg.Radio("mastered", "sortRadio", font=gui_font, enable_events=True, metadata="MAX(is_mastered)")]]),
+                              [sg.Radio("Title", "sortRadio", font=GUI_FONT, enable_events=True, default=True, metadata="groupkey"),
+                               sg.Radio("Channel", "sortRadio", font=GUI_FONT, enable_events=True, metadata="epg_channel"),
+                               sg.Radio("Date", "sortRadio", font=GUI_FONT, enable_events=True, metadata="timestamp")],
+                              [sg.Radio("COUNT", "sortRadio", font=GUI_FONT, enable_events=True, metadata="COUNT(*)"),
+                               sg.Radio("AVG(size)", "sortRadio", font=GUI_FONT, enable_events=True, metadata="AVG(file_size)"),
+                               sg.Radio("MAX(size)", "sortRadio", font=GUI_FONT, enable_events=True, metadata="MAX(file_size)"),
+                               sg.Radio("SUM(size)", "sortRadio", font=GUI_FONT, enable_events=True, metadata="SUM(file_size)"),
+                               sg.Radio("drop", "sortRadio", font=GUI_FONT, enable_events=True, metadata="MAX(is_dropped)"),
+                               sg.Radio("good", "sortRadio", font=GUI_FONT, enable_events=True, metadata="MAX(is_good)"),
+                               sg.Radio("mastered", "sortRadio", font=GUI_FONT, enable_events=True, metadata="MAX(is_mastered)")]]),
                                sg.Push(), sg.VerticalSeparator(color="green"), sg.Column([
-                              [sg.Radio("ASC", "orderRadio", font=gui_font, enable_events=True, default=True, metadata="ASC")],
-                              [sg.Radio("DESC", "orderRadio", font=gui_font, enable_events=True, metadata="DESC")]])],
+                              [sg.Radio("ASC", "orderRadio", font=GUI_FONT, enable_events=True, default=True, metadata="ASC")],
+                              [sg.Radio("DESC", "orderRadio", font=GUI_FONT, enable_events=True, metadata="DESC")]])],
                               [sg.HorizontalSeparator(color="green")],
-                              [sg.Text("SELECT Mode", key="metaTxt", font=gui_font, text_color="yellow"),
+                              [sg.Text("SELECT Mode", key="metaTxt", font=GUI_FONT, text_color="yellow"),
                                sg.VerticalSeparator(color="green"),
-                               sg.Text(key="selectionTxt", font=gui_font, text_color="yellow"),
+                               sg.Text(key="selectionTxt", font=GUI_FONT, text_color="yellow"),
                                sg.Push(), sg.Button("Drop", key="dropBtn")],]),
                    sg.Push(),
                    sg.Multiline(key="commentMul",
                                 size=(80, 6),
-                                font=gui_font,
+                                font=GUI_FONT,
                                 disabled=True)],
                   [sg.Listbox(key="recordingBox",
                               values=recordings,
                               size=(1280, 720),
                               enable_events=True,
-                              font=gui_font,
+                              font=GUI_FONT,
                               select_mode=sg.LISTBOX_SELECT_MODE_EXTENDED)]]
 
     global window
