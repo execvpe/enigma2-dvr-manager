@@ -9,7 +9,8 @@ import subprocess
 import sys
 
 from datetime import datetime
-from typing import cast, Callable, Iterator, Optional, Tuple
+from enum     import Enum
+from typing   import cast, Callable, Iterator, Optional, Tuple
 
 # Enigma 2 video file extension (default: ".ts")
 E2_VIDEO_EXTENSION = ".ts"
@@ -23,6 +24,17 @@ DROPPED_FILE = "dropped"
 
 # The default GUI font
 GUI_FONT = ("JetBrains Mono", 14)
+
+class QueryType(Enum):
+    ATTRIBUTE = 0
+    AGGREGATE = 1
+
+class SortOrder(Enum):
+    ASC = 0
+    DESC = 1
+
+    def __str__(self) -> str:
+        return super().__str__().strip(f"{self.__class__.__name__}.")
 
 class Recording:
     basepath: str
@@ -125,10 +137,14 @@ def drop_recording(rec: Recording) -> None:
                 print(filepath, file=f)
     db_remove(rec)
 
-def sort_recordings(order: Tuple[str, str]) -> None:
-    key_ranks = db_key_ranks(" ".join(order))
-    for r in recordings:
-        r.sortkey = key_ranks.get(r.groupkey, 0)
+def sort_recordings(order_by: str, query_type: QueryType, sort_order: SortOrder) -> None:
+    key_ranks = db_rank(order_by, query_type, sort_order)
+    if query_type == QueryType.ATTRIBUTE:
+        for r in recordings:
+            r.sortkey = key_ranks.get(r.file_basename, 0)
+    if query_type == QueryType.AGGREGATE:
+        for r in recordings:
+            r.sortkey = key_ranks.get(r.groupkey, 0)
     recordings.sort(key=lambda r: r.sortkey)
 
 def update_attribute(recs: list[Recording],
@@ -169,20 +185,22 @@ def gui_init() -> None:
                                font=GUI_FONT, text_color="grey")],
                               [sg.HorizontalSeparator(color="green")],
                               [sg.Text("Order by", font=GUI_FONT, text_color="grey"), sg.Column([
-                               #FIXME: Passing attributes without an aggregate function is undefined and results in garbage ordering
-                              [sg.Radio("Title", "sortRadio", font=GUI_FONT, enable_events=True, default=True, metadata="groupkey"),
-                               sg.Radio("Channel", "sortRadio", font=GUI_FONT, enable_events=True, metadata="epg_channel"),
-                               sg.Radio("Date", "sortRadio", font=GUI_FONT, enable_events=True, metadata="timestamp")],
-                              [sg.Radio("COUNT", "sortRadio", font=GUI_FONT, enable_events=True, metadata="COUNT(*)"),
-                               sg.Radio("AVG(size)", "sortRadio", font=GUI_FONT, enable_events=True, metadata="AVG(file_size)"),
-                               sg.Radio("MAX(size)", "sortRadio", font=GUI_FONT, enable_events=True, metadata="MAX(file_size)"),
-                               sg.Radio("SUM(size)", "sortRadio", font=GUI_FONT, enable_events=True, metadata="SUM(file_size)"),
-                               sg.Radio("drop", "sortRadio", font=GUI_FONT, enable_events=True, metadata="MAX(is_dropped)"),
-                               sg.Radio("good", "sortRadio", font=GUI_FONT, enable_events=True, metadata="MAX(is_good)"),
-                               sg.Radio("mastered", "sortRadio", font=GUI_FONT, enable_events=True, metadata="MAX(is_mastered)")]]),
+                              [sg.Radio("Title", "sortRadio", font=GUI_FONT, enable_events=True, default=True, metadata=("groupkey", QueryType.ATTRIBUTE)),
+                               sg.Radio("Channel", "sortRadio", font=GUI_FONT, enable_events=True, metadata=("epg_channel", QueryType.ATTRIBUTE)),
+                               sg.Radio("Date", "sortRadio", font=GUI_FONT, enable_events=True, metadata=("timestamp", QueryType.ATTRIBUTE)),
+                               sg.Radio("drop", "sortRadio", font=GUI_FONT, enable_events=True, metadata=("is_dropped", QueryType.ATTRIBUTE)),
+                               sg.Radio("good", "sortRadio", font=GUI_FONT, enable_events=True, metadata=("is_good", QueryType.ATTRIBUTE)),
+                               sg.Radio("mastered", "sortRadio", font=GUI_FONT, enable_events=True, metadata=("is_mastered", QueryType.ATTRIBUTE)),
+                               sg.Radio("COUNT", "sortRadio", font=GUI_FONT, enable_events=True, metadata=("COUNT(*)", QueryType.AGGREGATE)),],
+                              [sg.Radio("AVG(size)", "sortRadio", font=GUI_FONT, enable_events=True, metadata=("AVG(file_size)", QueryType.AGGREGATE)),
+                               sg.Radio("MAX(size)", "sortRadio", font=GUI_FONT, enable_events=True, metadata=("MAX(file_size)", QueryType.AGGREGATE)),
+                               sg.Radio("SUM(size)", "sortRadio", font=GUI_FONT, enable_events=True, metadata=("SUM(file_size)", QueryType.AGGREGATE)),
+                               sg.Radio("ANY(drop)", "sortRadio", font=GUI_FONT, enable_events=True, metadata=("MAX(is_dropped)", QueryType.AGGREGATE)),
+                               sg.Radio("ANY(good)", "sortRadio", font=GUI_FONT, enable_events=True, metadata=("MAX(is_good)", QueryType.AGGREGATE)),
+                               sg.Radio("ANY(mastered)", "sortRadio", font=GUI_FONT, enable_events=True, metadata=("MAX(is_mastered)", QueryType.AGGREGATE)),]]),
                                sg.Push(), sg.VerticalSeparator(color="green"), sg.Column([
-                              [sg.Radio("ASC", "orderRadio", font=GUI_FONT, enable_events=True, default=True, metadata="ASC")],
-                              [sg.Radio("DESC", "orderRadio", font=GUI_FONT, enable_events=True, metadata="DESC")]])],
+                              [sg.Radio("ASC", "orderRadio", font=GUI_FONT, enable_events=True, default=True, metadata=SortOrder.ASC)],
+                              [sg.Radio("DESC", "orderRadio", font=GUI_FONT, enable_events=True, metadata=SortOrder.DESC)]])],
                               [sg.HorizontalSeparator(color="green")],
                               [sg.Text("SELECT Mode", key="metaTxt", font=GUI_FONT, text_color="yellow"),
                                sg.VerticalSeparator(color="green"),
@@ -263,16 +281,27 @@ def db_load(basename: str) -> Optional[Recording]:
 
     return rec
 
-def db_key_ranks(order_by: str) -> dict[str, int]:
+def db_rank(order_by: str, query_type: QueryType, sort_order: SortOrder) -> dict[str, int]:
+    # Yes, the following database calls are vulnerable to SQL injections,
+    # but the tuple solution does not work here.
+    # Please let me know if you have a better solution...
+
     c = database.cursor()
-    # Yes, this is vulnerable to SQL injections, but the tuple solution does not work here
-    c.execute(f"""
-              SELECT groupkey,
-                     ROW_NUMBER() OVER (ORDER BY {order_by})
-              FROM recordings
-              GROUP BY groupkey
-              ORDER BY groupkey;
-              """)
+    if query_type == QueryType.ATTRIBUTE:
+        c.execute(f"""
+                  SELECT file_basename,
+                         ROW_NUMBER() OVER (ORDER BY {order_by} {sort_order}, groupkey, timestamp)
+                  FROM recordings
+                  ORDER BY file_basename;
+                  """)
+    if query_type == QueryType.AGGREGATE:
+        c.execute(f"""
+                  SELECT groupkey,
+                         ROW_NUMBER() OVER (ORDER BY {order_by} {sort_order}, groupkey, timestamp)
+                  FROM recordings
+                  GROUP BY groupkey
+                  ORDER BY groupkey;
+                  """)
 
     return dict(c.fetchall())
 
@@ -364,8 +393,10 @@ def main(argc: int, argv: list[str]) -> None:
 
     print(f"Successfully processed {len(filenames)} recordings. ({db_count} in cache, {len(filenames) - db_count} new)", file=sys.stderr)
 
-    last_order = ("groupkey", "ASC")
-    sort_recordings(last_order)
+    radios_metadata = (("groupkey", QueryType.ATTRIBUTE), SortOrder.ASC)
+    sort_recordings(radios_metadata[0][0], radios_metadata[0][1], radios_metadata[1])
+    radios_metadata_previous = radios_metadata
+
     gui_init()
 
     while True:
@@ -373,14 +404,14 @@ def main(argc: int, argv: list[str]) -> None:
         good_recodings = [r for r in recordings if r.is_good]
         mastered_recodings = [r for r in recordings if r.is_mastered]
 
-        selected_radios = tuple(cast(str, r.metadata) for r in window.element_list() if isinstance(r, sg.Radio) and r.get())
-        if selected_radios[0] in ("ASC", "DESC"):
-            selected_radios = selected_radios[::-1]
+        radios_metadata = tuple(r.metadata for r in window.element_list() if isinstance(r, sg.Radio) and r.get())
+        if isinstance(radios_metadata[0], SortOrder):
+            radios_metadata = radios_metadata[::-1]
 
-        if selected_radios != last_order:
-            sort_recordings(selected_radios)
+        if radios_metadata != radios_metadata_previous:
+            sort_recordings(radios_metadata[0][0], radios_metadata[0][1], radios_metadata[1])
             window["recordingBox"].update(recordings)
-            last_order = selected_radios
+            radios_metadata_previous = radios_metadata
 
         window["informationTxt"].update(f"{len(selected_recodings)} item(s) (approx. {to_GiB(sum([r.file_size for r in selected_recodings])):.1f} GiB) selected for drop | {len(good_recodings)} recordings good | {len(mastered_recodings)} mastered | {len(recordings)} total")
 
