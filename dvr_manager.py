@@ -160,6 +160,7 @@ def update_attribute(recs: list[Recording],
             window["recordingBox"].widget.delete(i)
             window["recordingBox"].widget.insert(i, r)
             window["selectionTxt"].update("")
+    gui_reselect(recs)
 
 def get_video_metadata(rec: Recording) -> Tuple[int, int, int, int]:
     vid = cv2.VideoCapture(rec.basepath + E2_VIDEO_EXTENSION)
@@ -244,6 +245,12 @@ def gui_recolor(window: sg.Window) -> None:
             continue
 
         window["recordingBox"].widget.itemconfig(i, fg="white", bg="black")
+
+def gui_reselect(recs: list[Recording]) -> None:
+    jump_indices = [i for i, r in enumerate(recordings) if r in recs]
+    for i in jump_indices:
+        window["recordingBox"].widget.selection_set(i)
+    window["recordingBox"].widget.see(jump_indices[0])
 
 def db_init() -> None:
     c = database.cursor()
@@ -413,10 +420,10 @@ def main(argc: int, argv: list[str]) -> None:
             sort_recordings(radios_metadata[0][0], radios_metadata[0][1], radios_metadata[1])
             window["recordingBox"].update(recordings)
             if len(recordingBox_selected_rec) > 0:
-                jump_index = [i for i, r in enumerate(recordings) if r == recordingBox_selected_rec[0]][0]
-                window["recordingBox"].widget.see(jump_index)
-                window["recordingBox"].widget.selection_set(jump_index)
+                gui_reselect(recordingBox_selected_rec)
             radios_metadata_previous = radios_metadata
+
+
 
         window["informationTxt"].update(f"{len(selected_recodings)} item(s) (approx. {to_GiB(sum([r.file_size for r in selected_recodings])):.1f} GiB) selected for drop | {len(good_recodings)} recordings good | {len(mastered_recodings)} mastered | {len(recordings)} total")
 
