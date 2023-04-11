@@ -159,7 +159,6 @@ def update_attribute(recs: list[Recording],
             i = recordings.index(r)
             window["recordingBox"].widget.delete(i)
             window["recordingBox"].widget.insert(i, r)
-            window["selectionTxt"].update("")
     gui_reselect(recs)
 
 def get_video_metadata(rec: Recording) -> Tuple[int, int, int, int]:
