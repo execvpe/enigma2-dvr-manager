@@ -1,7 +1,25 @@
 # Engima2 DVR Manager
 
-The Enigma2 DVR (Direct Video Recordings) Manager is a GUI-based tool for managing, sorting 
+The Enigma2 **D**irect **V**ideo **R**ecording Manager is a GUI-based tool for managing, sorting 
 and selectively deleting (duplicate) TV recordings made by an Enigma2 Linux-based TV recorder.
+
+## Disclaimer
+
+### This program is still a work in progress!
+
+Features may be deleted or changed in functionality without further notice.  
+It may be that the documentation below is not updated in time and therefore
+may not document the real behavior of the program.
+
+If so, please let me know or open a Pull Request with a suitable correction.  
+Any help is appreciated. :)
+
+### Use this software at your own risk!
+
+**I am not responsible** if you use this program (wrongly) and/or
+destroy important files on your system.
+
+**Always** check the file paths **before** deleting to be sure everything is correct!
 
 ## Features
 
@@ -21,39 +39,30 @@ and selectively deleting (duplicate) TV recordings made by an Enigma2 Linux-base
 - cv2 (tested: 4.7.0-7)
 - PySimpleGUI (tested: 4.60.3-1)
 
-If you are using Arch Linux, you can install the dependencies using:  
+If you are using Arch Linux, you can install the dependencies using:
 ```shell
 pacman -S python-opencv python-pysimplegui [ttf-jetbrains-mono]
 ```
 
-There should be a simillar way of installation if you are using another distribution or Windows.
-
-## Disclaimer
-
-### Use this software at your own risk!
-
-> This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY [...].
-
-This means especially:  
-**I am not responsible** if you use this program (wrongly) and thereby destroy
-important files on your system.
-
-***Always*** check the file paths **before** deleting to be sure everything is correct!
+There should be a similar way of installation if you are using another distribution or Windows.
 
 ## Usage
+
+Launch the program in your shell and supply all directory paths in which recordings are stored
+as the program arguments (see [example](#Example) below).
+There is currently no option to add or manage loaded directories via the GUI.
 
 ```shell
 ./dvr_manager.py <dir path> [dir path...]
 ```
 
-| Keybind   | Explanation |
-| :-------: | -------- |
-| O         | Open the first of the selected recordings in VLC       |
-| C         | Add a comment to the first of the selected recordings  |
-| Shift + C | Change the comment of the first recording and **overwrite the comments of all recordings under the cursor** with this one |
-| D         | Select all recordings under the cursor for drop |
-| Shift + D | Unselect all recordings under the cursor from drop |
+| Keyboard Shortcut | Explanation |
+| :---------------: | :---------: |
+| O         | Open the first of the selected recordings in VLC |
+| C         | Add or change the comment of one selected recording |
+| Shift + C | Add or change the comment of the first recording and **overwrite the comments of all recordings under the cursor** with this one |
+| D         | Select all recordings under the cursor for drop / Apply the D attribute to the selected recordings |
+| Shift + D | Remove the D attribute from the selected recordings |
 | G         | Mark recording as good / Apply the G attribute to the selected recordings |
 | Shift + G | Remove the G attribute from the selected recordings |
 | M         | Mark recording as mastered / Apply the M attribute to the selected recordings |
@@ -64,12 +73,23 @@ important files on your system.
 If you press the `Drop` button, the file paths of all files belonging
 to all recordings marked with the D attribute are written into the file
 `dropped` in the directory of this program.
+
 You can review the files again and then delete them manually or using:
-```
-xargs -d '\n' -n 1 rm -f < dropped
+```shell
+xargs -d '\n' -n 1 rm -vf < dropped
 ```
 
-**[Deletion is permanent!](#disclaimer) So be careful what you delete!**
+**[Deletion is permanent](#disclaimer)! So be careful what you delete!**
+
+If you restart the software without deleting/moving your dropped recordings,
+they will reappear in the recording list, but **without any previously set attributes**
+or comments, as any metadata will be purged from the local database when pressing `Drop`.
+
+If you are not yet confident about deletion,
+you can move the files to another directory to circumvent this behavior:
+```shell
+mkdir -p DROPPED_RECORDINGS && xargs -d '\n' -n 1 mv -vt DROPPED_RECORDINGS < dropped
+```
 
 ## Example
 
