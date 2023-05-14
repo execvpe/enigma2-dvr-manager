@@ -80,7 +80,6 @@ class RecordingFactory:
         rec.epg_description = remove_prefix(meta[2].strip(), rec.epg_title).strip()
         rec.video_duration, rec.video_height, rec.video_width, rec.video_fps = get_video_metadata(rec)
         rec.is_good, rec.is_dropped, rec.is_mastered = False, False, False
-        rec.groupkey  = make_groupkey(rec.epg_title)
         rec.comment = ""
 
         basename_tokens = rec.file_basename.split(" - ")
@@ -93,6 +92,8 @@ class RecordingFactory:
             rec.epg_channel = basename_tokens[1]
         if len(rec.epg_title) == 0:
             rec.epg_title = basename_tokens[2]
+
+        rec.groupkey  = make_groupkey(rec.epg_title)
 
         return rec
 
