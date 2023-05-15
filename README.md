@@ -1,4 +1,4 @@
-# Engima2 DVR Manager
+# Enigma2 DVR Manager
 
 The Enigma2 **D**irect **V**ideo **R**ecording Manager is a GUI-based tool for managing, sorting 
 and selectively deleting (duplicate) TV recordings made by an Enigma2 Linux-based TV recorder.
