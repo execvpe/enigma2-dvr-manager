@@ -104,7 +104,7 @@ class RecordingFactory:
         if rec is None:
             return None
 
-        assert rec.file_size == os.stat(basepath + E2_VIDEO_EXTENSION).st_size
+        assert rec.file_size == os.stat(basepath + E2_VIDEO_EXTENSION).st_size, str(rec)
 
         rec.basepath = basepath
 
