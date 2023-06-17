@@ -56,7 +56,7 @@ class Recording:
     timestamp: str
 
     def hd(self):
-        return self.video_width >= 720
+        return self.video_height >= 720
 
     def __attributes(self) -> str:
         return f"{'D' if self.is_dropped else '.'}{'G' if self.is_good else '.'}{'M' if self.is_mastered else '.'}{'C' if len(self.comment) > 0 else '.'}"
@@ -214,7 +214,8 @@ def gui_init() -> None:
                                sg.Radio("SUM(size)", "sortRadio", font=GUI_FONT, enable_events=True, metadata=("SUM(file_size)", QueryType.AGGREGATE)),
                                sg.Radio("ANY(drop)", "sortRadio", font=GUI_FONT, enable_events=True, metadata=("MAX(is_dropped)", QueryType.AGGREGATE)),
                                sg.Radio("ANY(good)", "sortRadio", font=GUI_FONT, enable_events=True, metadata=("MAX(is_good)", QueryType.AGGREGATE)),
-                               sg.Radio("ANY(mastered)", "sortRadio", font=GUI_FONT, enable_events=True, metadata=("MAX(is_mastered)", QueryType.AGGREGATE)),]]),
+                               sg.Radio("ANY(mastered)", "sortRadio", font=GUI_FONT, enable_events=True, metadata=("MAX(is_mastered)", QueryType.AGGREGATE)),
+                               sg.Radio("Resolution", "sortRadio", font=GUI_FONT, enable_events=True, metadata=("video_height", QueryType.ATTRIBUTE)),]]),
                                sg.Push(), sg.VerticalSeparator(color="green"), sg.Column([
                               [sg.Radio("ASC", "orderRadio", font=GUI_FONT, enable_events=True, default=True, metadata=SortOrder.ASC)],
                               [sg.Radio("DESC", "orderRadio", font=GUI_FONT, enable_events=True, metadata=SortOrder.DESC)]])],
