@@ -8,7 +8,7 @@ import sqlite3
 import subprocess
 import sys
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum     import Enum
 from typing   import cast, Callable, Iterator, Optional, Tuple
 
@@ -55,11 +55,17 @@ class Recording:
     comment: str
     timestamp: str
 
-    def __getattributes(rec) -> str:
-        return f"{'D' if rec.is_dropped else '.'}{'G' if rec.is_good else '.'}{'M' if rec.is_mastered else '.'}{'C' if len(rec.comment) > 0 else '.'}"
+    def __attributes(self) -> str:
+        return f"{'D' if self.is_dropped else '.'}{'G' if self.is_good else '.'}{'M' if self.is_mastered else '.'}{'C' if len(self.comment) > 0 else '.'}"
 
-    def __repr__(rec) -> str:
-        return f"{rec.__getattributes()} | {rec.timestamp} | {(to_GiB(rec.file_size)):4.1f} GiB | {(rec.video_duration // 60):3d} min | {rec.epg_channel[:10].ljust(10)} | {rec.epg_title[:42].ljust(42)} | {rec.epg_description}"
+    def __endtime(self) -> str:
+        dt = datetime.strptime(self.timestamp, "%Y-%m-%d %H:%M")
+        dt += timedelta(seconds=self.video_duration)
+
+        return datetime.strftime(dt ,"%H:%M")
+
+    def __repr__(self) -> str:
+        return f"{self.__attributes()} | {self.timestamp} - {self.__endtime()} | {(to_GiB(self.file_size)):4.1f} GiB | {(self.video_duration // 60):3d} min | {self.epg_channel[:10].ljust(10)} | {self.epg_title[:42].ljust(42)} | {self.epg_description}"
 
 # Recording objects
 recordings: list[Recording] = []
