@@ -68,7 +68,7 @@ class Recording:
         return datetime.strftime(dt ,"%H:%M")
 
     def __repr__(self) -> str:
-        return f"{self.__attributes()} | {self.timestamp} - {self.__endtime()} | {(to_GiB(self.file_size)):4.1f} GiB | {(self.video_duration // 60):3d} min | {self.epg_channel[:10].ljust(10)} | {self.epg_title[:42].ljust(42)} | {self.epg_description}"
+        return f"{self.__attributes()} | {self.timestamp} - {self.__endtime()} | {(to_GiB(self.file_size)):4.1f} GiB | {(self.video_duration // 60):3d} min | {fit_string(self.epg_channel, 10, 2).ljust(10)} | {fit_string(self.epg_title, 42, 7).ljust(42)} | {self.epg_description}"
 
 # Recording objects
 recordings: list[Recording] = []
@@ -132,6 +132,11 @@ def make_groupkey(line: str) -> str:
     return re.sub("[^a-z0-9]+", "",
                   line.lower()
                       .translate(str.maketrans(translations)))
+
+def fit_string(line: str, length: int, end: int) -> str:
+    if len(line) <= length:
+        return line
+    return f"{line[:(length - end - 1)]}*{line[-end:]}"
 
 def remove_prefix(line: str, prefix: str) -> str:
     return re.sub(f"^{re.escape(prefix)}", "", line)
