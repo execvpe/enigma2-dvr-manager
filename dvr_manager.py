@@ -68,7 +68,7 @@ class Recording:
         return datetime.strftime(dt ,"%H:%M")
 
     def __repr__(self) -> str:
-        return f"{self.__attributes()} | {self.timestamp} - {self.__endtime()} | {(to_GiB(self.file_size)):4.1f} GiB | {(self.video_duration // 60):3d} min | {fit_string(self.epg_channel, 10, 2).ljust(10)} | {fit_string(self.epg_title, 42, 7).ljust(42)} | {self.epg_description}"
+        return f"{self.__attributes()} | {self.timestamp} - {self.__endtime()} | {(to_GiB(self.file_size)):4.1f} GiB | {(self.video_duration // 60):3d}' | {fit_string(self.epg_channel, 10, 2).ljust(10)} | {fit_string(self.epg_title, 45, 7).ljust(45)} | {self.epg_description}"
 
 # Recording objects
 recordings: list[Recording] = []
