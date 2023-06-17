@@ -55,6 +55,9 @@ class Recording:
     comment: str
     timestamp: str
 
+    def hd(self):
+        return self.video_width >= 720
+
     def __attributes(self) -> str:
         return f"{'D' if self.is_dropped else '.'}{'G' if self.is_good else '.'}{'M' if self.is_mastered else '.'}{'C' if len(self.comment) > 0 else '.'}"
 
@@ -246,6 +249,10 @@ def gui_recolor(window: sg.Window) -> None:
 
         if r.is_mastered:
             window["recordingBox"].widget.itemconfig(i, fg="white", bg="blue")
+            continue
+
+        if not r.hd():
+            window["recordingBox"].widget.itemconfig(i, fg="grey", bg="black")
             continue
 
         if r.is_good:
