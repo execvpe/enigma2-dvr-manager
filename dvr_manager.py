@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
 
-import cv2
 import os
 import re
-import PySimpleGUI as sg
 import sqlite3
 import subprocess
 import sys
 
 from datetime import datetime, timedelta
 from enum     import Enum
-from typing   import cast, Callable, Iterator, Optional, Tuple
+
+from collections.abc import Callable
+from typing import Optional
+
+import cv2
+import PySimpleGUI as sg
 
 # Enigma 2 video file extension (default: ".ts")
 E2_VIDEO_EXTENSION = ".ts"
@@ -24,6 +27,15 @@ DROPPED_FILE = "dropped"
 
 # The default GUI font
 GUI_FONT = ("JetBrains Mono", 14)
+
+# Add some more translations if desired
+GROUPKEY_TRANSLATIONS = str.maketrans({
+    "ä": "ae",
+    "ö": "oe",
+    "ü": "ue",
+    "ß": "ss"
+})
+
 
 class QueryType(Enum):
     ATTRIBUTE = 0
@@ -55,7 +67,7 @@ class Recording:
     comment: str
     timestamp: str
 
-    def hd(self):
+    def hd(self) -> bool:
         return self.video_height >= 720
 
     def __attributes(self) -> str:
@@ -121,17 +133,9 @@ class RecordingFactory:
 
 # Remove everything that is not a letter or digit
 def make_groupkey(line: str) -> str:
-    # Add some more translations if desired
-    translations = {
-        "ä": "ae",
-        "ö": "oe",
-        "ü": "ue",
-        "ß": "ss"
-    }
-
-    return re.sub("[^a-z0-9]+", "",
+    return re.sub(r"[^a-z0-9]+", "",
                   line.lower()
-                      .translate(str.maketrans(translations)))
+                      .translate(GROUPKEY_TRANSLATIONS))
 
 def fit_string(line: str, length: int, end: int) -> str:
     if len(line) <= length:
@@ -139,13 +143,13 @@ def fit_string(line: str, length: int, end: int) -> str:
     return f"{line[:(length - end - 1)]}*{line[-end:]}"
 
 def remove_prefix(line: str, prefix: str) -> str:
-    return re.sub(f"^{re.escape(prefix)}", "", line)
+    return re.sub(rf"^{re.escape(prefix)}", "", line)
 
 def to_GiB(size: int) -> float:
     return size / 1_073_741_824
 
 def drop_recording(rec: Recording) -> None:
-    with open(DROPPED_FILE, "a") as f:
+    with open(DROPPED_FILE, "a", encoding="utf-8") as f:
         for e in E2_EXTENSIONS:
             filepath = rec.basepath + e
             if os.path.exists(filepath):
@@ -176,7 +180,7 @@ def update_attribute(recs: list[Recording],
             window["recordingBox"].widget.insert(i, r)
     gui_reselect(recs)
 
-def get_video_metadata(rec: Recording) -> Tuple[int, int, int, int]:
+def get_video_metadata(rec: Recording) -> tuple[int, int, int, int]:
     vid = cv2.VideoCapture(rec.basepath + E2_VIDEO_EXTENSION)
 
     fps    = int(vid.get(cv2.CAP_PROP_FPS))
@@ -405,7 +409,7 @@ def main(argc: int, argv: list[str]) -> None:
     db_count = 0
     for i, f in enumerate(filenames):
         print(f"Processing recording {i + 1} of {len(filenames)}", end="\r", file=sys.stderr)
-        basepath = re.sub(f"\{E2_VIDEO_EXTENSION}$", "", f)
+        basepath = re.sub(rf"\{E2_VIDEO_EXTENSION}$", "", f)
         rec = RecordingFactory.from_database(basepath)
         if rec is not None:
             recordings.append(rec)
@@ -452,7 +456,7 @@ def main(argc: int, argv: list[str]) -> None:
         event, _ = window.read()
 
         if event == sg.WIN_CLOSED:
-            quit()
+            sys.exit()
 
         recordingBox_selected_rec = window["recordingBox"].get()
 
@@ -475,7 +479,7 @@ def main(argc: int, argv: list[str]) -> None:
                 event, _ = window.read()
 
                 if event == sg.WIN_CLOSED:
-                    quit()
+                    sys.exit()
 
                 if event != "Escape:9":
                     continue
