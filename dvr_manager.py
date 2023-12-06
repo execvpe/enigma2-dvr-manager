@@ -121,8 +121,8 @@ class RecordingFactory:
     @staticmethod
     def from_database(basepath: str) -> Optional[Recording]:
         basename = os.path.basename(basepath)
-        rec = db_load(basename)
-        if rec is None:
+
+        if (rec := db_load(basename)) is None:
             return None
 
         assert rec.file_size == os.stat(basepath + E2_VIDEO_EXTENSION).st_size, str(rec)
@@ -298,9 +298,8 @@ def db_load(basename: str) -> Optional[Recording]:
               FROM recordings
               WHERE file_basename = ?;
               """, (basename, ))
-    raw = c.fetchone()
 
-    if raw is None:
+    if (raw := c.fetchone()) is None:
         return None
 
     rec = Recording()
@@ -410,8 +409,7 @@ def main(argc: int, argv: list[str]) -> None:
     for i, f in enumerate(filenames):
         print(f"Processing recording {i + 1} of {len(filenames)}", end="\r", file=sys.stderr)
         basepath = re.sub(rf"\{E2_VIDEO_EXTENSION}$", "", f)
-        rec = RecordingFactory.from_database(basepath)
-        if rec is not None:
+        if (rec := RecordingFactory.from_database(basepath)) is not None:
             recordings.append(rec)
             db_count += 1
             continue
