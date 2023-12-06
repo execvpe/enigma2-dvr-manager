@@ -447,8 +447,7 @@ def main(argc: int, argv: list[str]) -> None:
             radios_metadata_previous = radios_metadata
 
 
-
-        window["informationTxt"].update(f"{len(selected_recodings)} item(s) (approx. {to_GiB(sum([r.file_size for r in selected_recodings])):.1f} GiB) selected for drop | {len(good_recodings)} recordings good | {len(mastered_recodings)} mastered | {len(recordings)} total")
+        window["informationTxt"].update(f"{len(selected_recodings)} item(s) (approx. {to_GiB(sum(r.file_size for r in selected_recodings)):.1f} GiB) selected for drop | {len(good_recodings)} recordings good | {len(mastered_recodings)} mastered | {len(recordings)} total")
 
         gui_recolor(window)
         event, _ = window.read()
