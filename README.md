@@ -38,8 +38,8 @@ destroy important files on your system.
 - JetBrains Mono font (*you can change the font at the top of `dvr_manager.py`*)
   or any other (monospace) font
 
-- cv2 (tested: 4.7.0-12)
-- PySimpleGUI (tested: 4.60.3-1)
+- OpenCV `cv2` (tested: 4.8.1-4)
+- PySimpleGUI (tested: 4.60.5-1)
 
 If you are using Arch Linux, you can install the dependencies using:
 ```shell
