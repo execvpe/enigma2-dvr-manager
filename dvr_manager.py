@@ -260,8 +260,13 @@ def gui_init() -> None:
     window["findMul"].widget.config(fg="white", bg="black")
 
 def gui_find(find_string: str) -> None:
-    matches = [i for i, r in enumerate(recordings) if r.groupkey.startswith(find_string)]
-    window["recordingBox"].widget.see(matches[0])
+    matches = []
+    for i, r in enumerate(recordings):
+        if r.groupkey.startswith(find_string):
+            matches.append(i)
+
+    if len(matches) > 0:
+        window["recordingBox"].widget.see(matches[0])
 
 def gui_recolor(window: sg.Window) -> None:
     for i, r in enumerate(recordings):
