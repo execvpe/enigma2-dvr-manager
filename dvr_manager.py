@@ -200,7 +200,7 @@ def gui_init() -> None:
     gui_layout = [[sg.Column([[sg.Text(key="informationTxt",
                                font=GUI_FONT)],
                               [sg.HorizontalSeparator(color="green")],
-                              [sg.Text("[O]pen in VLC | [C]omment | [D]rop | [G]ood | [M]astered | Undo: [Shift + 'Key']",
+                              [sg.Text("[F]ind, [O]pen in VLC | [C]omment | [D]rop | [G]ood | [M]astered | Undo: [Shift + 'Key']",
                                font=GUI_FONT, text_color="grey")],
                               [sg.HorizontalSeparator(color="green")],
                               [sg.Text("Order by", font=GUI_FONT, text_color="grey"), sg.Column([
@@ -227,7 +227,14 @@ def gui_init() -> None:
                               [sg.Text("SELECT Mode", key="metaTxt", font=GUI_FONT, text_color="yellow"),
                                sg.VerticalSeparator(color="green"),
                                sg.Text(key="selectionTxt", font=GUI_FONT, text_color="yellow"),
-                               sg.Push(), sg.Button("Drop", key="dropBtn")],]),
+                               sg.Push(),
+                               sg.Multiline(key="findMul",
+                                            size=(40, 1),
+                                            font=GUI_FONT,
+                                            no_scrollbar=True,
+                                            disabled=True),
+                               sg.VerticalSeparator(color="green"),
+                               sg.Button("Drop", key="dropBtn")],]),
                    sg.Push(),
                    sg.Multiline(key="commentMul",
                                 size=(80, 6),
@@ -250,6 +257,11 @@ def gui_init() -> None:
     window["recordingBox"].set_focus()
     window["recordingBox"].widget.config(fg="white", bg="black")
     window["commentMul"].widget.config(fg="white", bg="black")
+    window["findMul"].widget.config(fg="white", bg="black")
+
+def gui_find(find_string: str) -> None:
+    matches = [i for i, r in enumerate(recordings) if r.groupkey.startswith(find_string)]
+    window["recordingBox"].widget.see(matches[0])
 
 def gui_recolor(window: sg.Window) -> None:
     for i, r in enumerate(recordings):
@@ -491,6 +503,34 @@ def main(argc: int, argv: list[str]) -> None:
             update_attribute(recordingBox_selected_rec,
                              lambda r: True,
                              lambda r: setattr(r, "comment", comment))
+            window["recordingBox"].set_focus()
+            continue
+
+        # [F]ind
+        if event == "f:41":
+            window["recordingBox"].update(disabled=True)
+            window["dropBtn"].update(disabled=True)
+            window["metaTxt"].update("Find Mode | Submit: [ESC]")
+            window["findMul"].update(disabled=False)
+            window["findMul"].set_focus()
+
+            while True:
+                event, _ = window.read()
+
+                if event == sg.WIN_CLOSED:
+                    sys.exit()
+
+                if event != "Escape:9":
+                    continue
+
+                find_string = window["findMul"].get()
+                break
+
+            window["findMul"].update(disabled=True)
+            window["dropBtn"].update(disabled=False)
+            window["metaTxt"].update("SELECT Mode")
+            gui_find(find_string)
+            window["recordingBox"].update(disabled=False)
             window["recordingBox"].set_focus()
             continue
 
