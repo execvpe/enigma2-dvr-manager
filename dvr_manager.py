@@ -259,7 +259,7 @@ def gui_init() -> None:
     window["commentMul"].widget.config(fg="white", bg="black")
     window["findMul"].widget.config(fg="white", bg="black")
 
-def gui_find(find_string: str) -> None:
+def gui_find(find_string: str) -> int:
     matches = []
     for i, r in enumerate(recordings):
         if r.groupkey.startswith(find_string):
@@ -267,6 +267,8 @@ def gui_find(find_string: str) -> None:
 
     if len(matches) > 0:
         window["recordingBox"].widget.see(matches[0])
+
+    return len(matches)
 
 def gui_recolor(window: sg.Window) -> None:
     for i, r in enumerate(recordings):
@@ -525,7 +527,8 @@ def main(argc: int, argv: list[str]) -> None:
                 if event == sg.WIN_CLOSED:
                     sys.exit()
 
-                gui_find(window["findMul"].get())
+                matches_found = gui_find(window["findMul"].get())
+                window["selectionTxt"].update(f"{matches_found} matching recording(s) found")
 
                 if event == "Escape:9":
                     break
