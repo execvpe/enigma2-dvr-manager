@@ -520,16 +520,14 @@ def main(argc: int, argv: list[str]) -> None:
                 if event == sg.WIN_CLOSED:
                     sys.exit()
 
-                if event != "Escape:9":
-                    continue
+                gui_find(window["findMul"].get())
 
-                find_string = window["findMul"].get()
-                break
+                if event == "Escape:9":
+                    break
 
             window["findMul"].update(disabled=True)
             window["dropBtn"].update(disabled=False)
             window["metaTxt"].update("SELECT Mode")
-            gui_find(find_string)
             window["recordingBox"].update(disabled=False)
             window["recordingBox"].set_focus()
             continue
