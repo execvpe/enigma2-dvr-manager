@@ -228,10 +228,10 @@ def gui_init() -> None:
                                sg.VerticalSeparator(color="green"),
                                sg.Text(key="selectionTxt", font=GUI_FONT, text_color="yellow"),
                                sg.Push(),
-                               sg.Multiline(key="findMul",
-                                            size=(40, 1),
+                               sg.Input(key="findInput",
+                                            size=40,
                                             font=GUI_FONT,
-                                            no_scrollbar=True,
+                                            do_not_clear=False,
                                             disabled=True),
                                sg.VerticalSeparator(color="green"),
                                sg.Button("Drop", key="dropBtn")],]),
@@ -257,7 +257,7 @@ def gui_init() -> None:
     window["recordingBox"].set_focus()
     window["recordingBox"].widget.config(fg="white", bg="black")
     window["commentMul"].widget.config(fg="white", bg="black")
-    window["findMul"].widget.config(fg="white", bg="black")
+    window["findInput"].widget.config(fg="white", bg="black")
 
 def gui_find(find_string: str) -> int:
     matches = []
@@ -517,9 +517,9 @@ def main(argc: int, argv: list[str]) -> None:
         if event == "f:41":
             window["recordingBox"].update(disabled=True)
             window["dropBtn"].update(disabled=True)
-            window["findMul"].update(disabled=False)
-            window["findMul"].set_focus()
             window["metaTxt"].update("FIND Mode | Submit: [ESC]")
+            window["findInput"].update("", disabled=False)
+            window["findInput"].set_focus()
 
             while True:
                 event, _ = window.read()
@@ -527,13 +527,13 @@ def main(argc: int, argv: list[str]) -> None:
                 if event == sg.WIN_CLOSED:
                     sys.exit()
 
-                matches_found = gui_find(window["findMul"].get())
+                matches_found = gui_find(window["findInput"].get())
                 window["selectionTxt"].update(f"{matches_found} matching recording(s) found")
 
                 if event == "Escape:9":
                     break
 
-            window["findMul"].update(disabled=True)
+            window["findInput"].update(disabled=True)
             window["dropBtn"].update(disabled=False)
             window["metaTxt"].update("SELECT Mode")
             window["recordingBox"].update(disabled=False)
