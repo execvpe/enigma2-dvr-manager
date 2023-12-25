@@ -517,9 +517,9 @@ def main(argc: int, argv: list[str]) -> None:
         if event == "f:41":
             window["recordingBox"].update(disabled=True)
             window["dropBtn"].update(disabled=True)
-            window["metaTxt"].update("Find Mode | Submit: [ESC]")
             window["findMul"].update(disabled=False)
             window["findMul"].set_focus()
+            window["metaTxt"].update("FIND Mode | Submit: [ESC]")
 
             while True:
                 event, _ = window.read()
