@@ -143,7 +143,7 @@ def fit_string(line: str, length: int, end: int) -> str:
     return f"{line[:(length - end - 1)]}*{line[-end:]}"
 
 def remove_prefix(line: str, prefix: str) -> str:
-    return re.sub(rf"^{re.escape(prefix)}", "", line)
+    return re.sub(rf"^{re.escape(prefix)}", "~", line)
 
 def to_GiB(size: int) -> float:
     return size / 1_073_741_824
