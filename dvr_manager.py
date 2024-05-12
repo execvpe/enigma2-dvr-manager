@@ -13,7 +13,7 @@ from collections.abc import Callable
 from typing import Optional
 
 import cv2
-import PySimpleGUI as sg
+import FreeSimpleGUI as sg
 
 # Enigma 2 video file extension (default: ".ts")
 E2_VIDEO_EXTENSION = ".ts"

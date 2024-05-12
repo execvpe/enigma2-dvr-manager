@@ -38,23 +38,13 @@ destroy important files on your system.
 - JetBrains Mono font (*you can change the font at the top of `dvr_manager.py`*)
   or any other (monospace) font
 
-- OpenCV `cv2` (tested: 4.8.1-4)
-- PySimpleGUI (tested: 4.60.5-1)
+- OpenCV `cv2` (tested: 4.9.0.80)
+- FreeSimpleGUI (tested: 5.0.0)
 
-If you are using Arch Linux, you can install the dependencies using:
+Use the Package Installer for Python `pip3`:
 ```shell
-pacman -S python-opencv [ttf-jetbrains-mono]
-yay -S python-pysimplegui
+pip3 install --user [--break-system-packages] opencv-python freesimplegui
 ```
-
-AUR helpers other than `yay` may require different syntax.
-
-Alternatively use the Package Installer for Python `pip3`:
-```shell
-pip3 install opencv-python pysimplegui
-```
-
-There should be a similar way of installation if you are using another distribution or Windows.
 
 ## Usage
 
