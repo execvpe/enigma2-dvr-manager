@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from enum     import Enum
 
 from collections.abc import Callable
-from typing import Optional
+from typing import Iterator, Optional
 
 import cv2
 import FreeSimpleGUI as sg
@@ -79,6 +79,12 @@ class Recording:
 
         return datetime.strftime(dt ,"%H:%M")
 
+    def __eq__(self, other):
+        return self.file_basename == other.file_basename
+
+    def __hash__(self):
+        return self.file_basename.__hash__()
+
     def __repr__(self) -> str:
         return f"{self.__attributes()} | {self.timestamp} - {self.__endtime()} | {(to_GiB(self.file_size)):4.1f} GiB | {(self.video_duration // 60):3d}' | {fit_string(self.epg_channel, 10, 2).ljust(10)} | {fit_string(self.epg_title, 45, 7).ljust(45)} | {self.epg_description}"
 
@@ -130,6 +136,19 @@ class RecordingFactory:
         rec.basepath = basepath
 
         return rec
+
+    @staticmethod
+    def from_database_mastered() -> Optional[list[Recording]]:
+        if (m := db_load_mastered()) is None:
+            return None
+
+        all_mastered = list(m)
+
+        for r in all_mastered:
+            r.basepath = None
+            r.file_size = 0
+
+        return all_mastered
 
 # Remove everything that is not a letter or digit
 def make_groupkey(line: str) -> str:
@@ -332,6 +351,31 @@ def db_load(basename: str) -> Optional[Recording]:
 
     return rec
 
+def db_load_mastered() -> Optional[Iterator[Recording]]:
+    c = database.cursor()
+    c.execute("""
+              SELECT file_basename, file_size,
+                epg_channel, epg_title, epg_description,
+                video_duration, video_height, video_width, video_fps,
+                is_good, is_dropped, is_mastered, groupkey, comment, timestamp
+              FROM recordings
+              WHERE is_mastered = TRUE;
+              """)
+
+    if len(all_raw := c.fetchall()) == 0:
+        return None
+
+    for raw in all_raw:
+        rec = Recording()
+        rec.file_basename, rec.file_size = raw[0], int(raw[1])
+        rec.epg_channel, rec.epg_title, rec.epg_description = raw[2], raw[3], raw[4]
+        rec.video_duration, rec.video_height, rec.video_width, rec.video_fps = raw[5], raw[6], raw[7], raw[8]
+        rec.is_good, rec.is_dropped, rec.is_mastered = bool(raw[9]), raw[10], bool(raw[11])
+        rec.groupkey, rec.comment = raw[12], raw[13]
+        rec.timestamp = raw[14]
+
+        yield rec
+
 def db_rank(order_by: str, query_type: QueryType, sort_order: SortOrder) -> dict[str, int]:
     # Yes, the following database calls are vulnerable to SQL injections,
     # but the tuple solution does not work here.
@@ -443,6 +487,9 @@ def main(argc: int, argv: list[str]) -> None:
 
     print(f"Successfully processed {len(filenames)} recordings. ({db_count} in cache, {len(filenames) - db_count} new)", file=sys.stderr)
 
+    # Always load mastered recordings from database
+    recordings.extend(r for r in RecordingFactory.from_database_mastered() if r not in recordings)
+
     radios_metadata = (("groupkey", QueryType.ATTRIBUTE), SortOrder.ASC)
     sort_recordings(radios_metadata[0][0], radios_metadata[0][1], radios_metadata[1])
     radios_metadata_previous = radios_metadata
@@ -543,7 +590,8 @@ def main(argc: int, argv: list[str]) -> None:
 
         # [O]pen recording using VLC
         if event == "o:32" and len(recordingBox_selected_rec) > 0:
-            subprocess.Popen(["/usr/bin/env", "vlc", recordingBox_selected_rec[0].basepath + E2_VIDEO_EXTENSION])
+            if (bp := recordingBox_selected_rec[0].basepath) is not None:
+                subprocess.Popen(["/usr/bin/env", "vlc", bp + E2_VIDEO_EXTENSION])
             continue
 
         # Select for [D]rop
