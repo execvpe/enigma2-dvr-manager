@@ -3,6 +3,7 @@
 import os
 import re
 import sqlite3
+import string
 import subprocess
 import sys
 
@@ -19,6 +20,8 @@ import FreeSimpleGUI as sg
 E2_VIDEO_EXTENSION = ".ts"
 # Enigma 2 meta file extension (default: ".ts.meta")
 E2_META_EXTENSION = ".ts.meta"
+# Enigma 2 eit file extension (default: ".eit")
+E2_EIT_EXTENSION = ".eit"
 # As far as I know there are six files associated to each recording
 E2_EXTENSIONS = [".eit", ".ts", ".ts.ap", ".ts.cuts", ".ts.meta", ".ts.sc"]
 
@@ -212,6 +215,13 @@ def get_video_metadata(rec: Recording) -> tuple[int, int, int, int]:
     duration = frames // fps if fps != 0 else -1
 
     return (duration, height, width, fps)
+
+def get_eit_data(rec: Recording) -> str:
+    with open(rec.basepath + E2_EIT_EXTENSION, "rb") as f:
+        # Filter out non-printable charactes / header information
+        content = bytes(c if c in range(ord(' '), ord('~')) else ord('.') for c in f.read())
+        # Convert to string
+        return content.decode("ascii")
 
 def gui_init() -> None:
     sg.ChangeLookAndFeel("Dark Black")
@@ -586,6 +596,15 @@ def main(argc: int, argv: list[str]) -> None:
             window["metaTxt"].update("SELECT Mode")
             window["recordingBox"].update(disabled=False)
             window["recordingBox"].set_focus()
+            continue
+
+        # [I]nformation from EIT entry
+        if event == "i:31" and len(recordingBox_selected_rec) == 1:
+            sg.Popup(get_eit_data(recordingBox_selected_rec[0]),
+                     title=f"EIT - {recordingBox_selected_rec[0].epg_title}",
+                     font=GUI_FONT,
+                     any_key_closes=True,
+                     location=window.current_location())
             continue
 
         # [O]pen recording using VLC
