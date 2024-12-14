@@ -144,10 +144,8 @@ class RecordingFactory:
 
     @staticmethod
     def from_database_mastered() -> Optional[list[Recording]]:
-        if (m := db_load_mastered()) is None:
+        if (all_mastered := db_load_mastered_all()) is None:
             return None
-
-        all_mastered = list(m)
 
         for r in all_mastered:
             r.basepath = None
@@ -366,7 +364,7 @@ def db_load(basename: str) -> Optional[Recording]:
 
     return rec
 
-def db_load_mastered() -> Optional[Iterator[Recording]]:
+def db_load_mastered_all() -> Optional[list[Recording]]:
     c = database.cursor()
     c.execute("""
               SELECT file_basename, file_size,
@@ -380,6 +378,7 @@ def db_load_mastered() -> Optional[Iterator[Recording]]:
     if len(all_raw := c.fetchall()) == 0:
         return None
 
+    all_mastered = []
     for raw in all_raw:
         rec = Recording()
         rec.file_basename, rec.file_size = raw[0], int(raw[1])
@@ -389,7 +388,9 @@ def db_load_mastered() -> Optional[Iterator[Recording]]:
         rec.groupkey, rec.comment = raw[12], raw[13]
         rec.timestamp = raw[14]
 
-        yield rec
+        all_mastered.append(rec)
+
+    return all_mastered
 
 def db_rank(order_by: str, query_type: QueryType, sort_order: SortOrder) -> dict[str, int]:
     # Yes, the following database calls are vulnerable to SQL injections,
