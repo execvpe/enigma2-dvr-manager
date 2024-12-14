@@ -229,7 +229,7 @@ def gui_init() -> None:
     gui_layout = [[sg.Column([[sg.Text(key="informationTxt",
                                font=GUI_FONT)],
                               [sg.HorizontalSeparator(color="green")],
-                              [sg.Text("[F]ind, [O]pen in VLC | [C]omment | [D]rop | [G]ood | [M]astered | Undo: [Shift + 'Key']",
+                              [sg.Text("[F]ind | [O]pen in VLC | [C]omment | [D]rop | [G]ood | [M]astered | Undo: [Shift + 'Key']",
                                font=GUI_FONT, text_color="grey")],
                               [sg.HorizontalSeparator(color="green")],
                               [sg.Text("Order by", font=GUI_FONT, text_color="grey"), sg.Column([
