@@ -143,9 +143,9 @@ class RecordingFactory:
         return rec
 
     @staticmethod
-    def from_database_mastered() -> Optional[list[Recording]]:
+    def from_database_mastered() -> list[Recording]:
         if (all_mastered := db_load_mastered_all()) is None:
-            return None
+            return []
 
         for r in all_mastered:
             r.basepath = None
