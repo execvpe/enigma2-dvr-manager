@@ -207,6 +207,7 @@ def gui_init() -> None:
                               [sg.Radio("Title", "sortRadio", font=GUI_FONT, enable_events=True, default=True, metadata=("groupkey", QueryType.ATTRIBUTE)),
                                sg.Radio("Channel", "sortRadio", font=GUI_FONT, enable_events=True, metadata=("epg_channel", QueryType.ATTRIBUTE)),
                                sg.Radio("Date", "sortRadio", font=GUI_FONT, enable_events=True, metadata=("timestamp", QueryType.ATTRIBUTE)),
+                               sg.Radio("Time", "sortRadio", font=GUI_FONT, enable_events=True, metadata=("TIME(timestamp)", QueryType.ATTRIBUTE)),
                                sg.Radio("Size", "sortRadio", font=GUI_FONT, enable_events=True, metadata=("file_size", QueryType.ATTRIBUTE)),
                                sg.Radio("Duration", "sortRadio", font=GUI_FONT, enable_events=True, metadata=("video_duration", QueryType.ATTRIBUTE)),
                                sg.Radio("drop", "sortRadio", font=GUI_FONT, enable_events=True, metadata=("is_dropped", QueryType.ATTRIBUTE)),
