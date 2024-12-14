@@ -58,6 +58,8 @@ There is currently no option to add or manage loaded directories via the GUI.
 
 | Keyboard Shortcut | Explanation |
 | :---------------: | :---------: |
+| F         | Find recordings based on their title |
+| I         | Show a dialog box containing extended information from the EIT entry |
 | O         | Open the first of the selected recordings in VLC |
 | C         | Add or change the comment of one selected recording |
 | Shift + C | Add or change the comment of the first recording and **overwrite the comments of all recordings under the cursor** with this one |
