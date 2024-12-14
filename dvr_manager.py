@@ -292,7 +292,7 @@ def gui_init() -> None:
 def gui_find(find_string: str) -> int:
     matches = []
     for i, r in enumerate(recordings):
-        if r.groupkey.startswith(find_string):
+        if r.groupkey.startswith(make_groupkey(find_string)):
             matches.append(i)
 
     if len(matches) > 0:
