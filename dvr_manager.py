@@ -52,7 +52,7 @@ class SortOrder(Enum):
         return super().__str__().strip(f"{self.__class__.__name__}.")
 
 class Recording:
-    basepath: str
+    basepath: Optional[str]
     file_basename: str
     file_size: int
     epg_channel: str
@@ -82,10 +82,12 @@ class Recording:
 
         return datetime.strftime(dt ,"%H:%M")
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Recording):
+            return False
         return self.file_basename == other.file_basename
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return self.file_basename.__hash__()
 
     def __repr__(self) -> str:
@@ -173,6 +175,7 @@ def to_GiB(size: int) -> float:
 def drop_recording(rec: Recording) -> None:
     with open(DROPPED_FILE, "a", encoding="utf-8") as f:
         for e in E2_EXTENSIONS:
+            assert rec.basepath is not None
             filepath = rec.basepath + e
             if os.path.exists(filepath):
                 print(filepath, file=f)
@@ -203,6 +206,7 @@ def update_attribute(recs: list[Recording],
     gui_reselect(recs)
 
 def get_video_metadata(rec: Recording) -> tuple[int, int, int, int]:
+    assert rec.basepath is not None
     vid = cv2.VideoCapture(rec.basepath + E2_VIDEO_EXTENSION)
 
     fps    = int(vid.get(cv2.CAP_PROP_FPS))
@@ -217,6 +221,7 @@ def get_video_metadata(rec: Recording) -> tuple[int, int, int, int]:
     return (duration, height, width, fps)
 
 def get_eit_data(rec: Recording) -> str:
+    assert rec.basepath is not None
     with open(rec.basepath + E2_EIT_EXTENSION, "rb") as f:
         # Filter out non-printable charactes / header information
         content = bytes(c if c in range(ord(' '), ord('~')) else ord('.') for c in f.read())
