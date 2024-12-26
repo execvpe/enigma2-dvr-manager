@@ -227,7 +227,7 @@ def get_eit_data(rec: Recording) -> str:
         return content.decode("ascii")
 
 def gui_init() -> None:
-    sg.ChangeLookAndFeel("Dark Black")
+    sg.change_look_and_feel("Dark Black")
 
     gui_layout = [[sg.Column([[sg.Text(key="informationTxt",
                                font=GUI_FONT)],
@@ -606,7 +606,7 @@ def main(argc: int, argv: list[str]) -> None:
 
         # [I]nformation from EIT entry
         if event == "i:31" and len(recordingBox_selected_rec) == 1:
-            sg.Popup(get_eit_data(recordingBox_selected_rec[0]),
+            sg.popup(get_eit_data(recordingBox_selected_rec[0]),
                      title=f"EIT - {recordingBox_selected_rec[0].epg_title}",
                      font=GUI_FONT,
                      any_key_closes=True,
