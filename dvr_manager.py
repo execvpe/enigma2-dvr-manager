@@ -468,20 +468,25 @@ def all_recordings_in(dirpath: str) -> list[str]:
 
     return all_files
 
+def get_files_from_directory(dirs: list[str]) -> list[str]:
+    print("Scanning directories... (This may take a while)", file=sys.stderr)
+
+    files = []
+    for i, d in enumerate(dirs):
+        print(f"Scanning directory: {i + 1} of {len(dirs)}", end="\r", file=sys.stderr)
+        files += all_recordings_in(d)
+
+    print(f"Successfully scanned {len(dirs)} directories.", file=sys.stderr)
+
+    return files
+
 def main(argc: int, argv: list[str]) -> None:
     if argc < 2:
         raise IndexError(f"Usage: {argv[0]} <dir path> [dir path ...]")
 
     db_init()
 
-    print("Scanning directories... (This may take a while)", file=sys.stderr)
-
-    filenames = []
-    for i, d in enumerate(argv[1:]):
-        print(f"Scanning directory: {i + 1} of {argc - 1}", end="\r", file=sys.stderr)
-        filenames += all_recordings_in(d)
-
-    print(f"Successfully scanned {argc - 1} directories.", file=sys.stderr)
+    filenames = get_files_from_directory(argv[1:])
 
     print("Processing recordings... (This may take a while)", file=sys.stderr)
 
