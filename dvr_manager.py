@@ -480,19 +480,12 @@ def get_files_from_directory(dirs: list[str]) -> list[str]:
 
     return files
 
-def main(argc: int, argv: list[str]) -> None:
-    if argc < 2:
-        raise IndexError(f"Usage: {argv[0]} <dir path> [dir path ...]")
-
-    db_init()
-
-    filenames = get_files_from_directory(argv[1:])
-
+def process_recording_files(files: list[str]) -> None:
     print("Processing recordings... (This may take a while)", file=sys.stderr)
 
     db_count = 0
-    for i, f in enumerate(filenames):
-        print(f"Processing recording {i + 1} of {len(filenames)}", end="\r", file=sys.stderr)
+    for i, f in enumerate(files):
+        print(f"Processing recording {i + 1} of {len(files)}", end="\r", file=sys.stderr)
         basepath = re.sub(rf"\{E2_VIDEO_EXTENSION}$", "", f)
         if (rec := RecordingFactory.from_database(basepath)) is not None:
             recordings.append(rec)
@@ -506,7 +499,16 @@ def main(argc: int, argv: list[str]) -> None:
         except FileNotFoundError:
             print(f"{f}.meta not found! Skipping...", file=sys.stderr)
 
-    print(f"Successfully processed {len(filenames)} recordings. ({db_count} in cache, {len(filenames) - db_count} new)", file=sys.stderr)
+    print(f"Successfully processed {len(files)} recordings. ({db_count} in cache, {len(files) - db_count} new)", file=sys.stderr)
+
+def main(argc: int, argv: list[str]) -> None:
+    if argc < 2:
+        raise IndexError(f"Usage: {argv[0]} <dir path> [dir path ...]")
+
+    db_init()
+
+    # Crawl directory tree for recordings, search cache, add them to the list
+    process_recording_files(get_files_from_directory(argv[1:]))
 
     # Always load mastered recordings from database
     recordings.extend(r for r in RecordingFactory.from_database_mastered() if r not in recordings)
