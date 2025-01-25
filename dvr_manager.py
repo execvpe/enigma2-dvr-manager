@@ -333,8 +333,8 @@ def db_init() -> None:
     c = database.cursor()
     c.execute("""
               CREATE TABLE IF NOT EXISTS
-                recordings(file_basename VARCHAR PRIMARY KEY, groupkey VARCHAR,
-                  timestamp DATETIME, file_size INT,
+                recordings(file_basename VARCHAR PRIMARY KEY,
+                  groupkey VARCHAR, timestamp DATETIME, file_size INT,
                   epg_channel VARCHAR, epg_title VARCHAR, epg_description VARCHAR,
                   video_duration INT, video_height INT, video_width INT, video_fps INT,
                   is_good BOOL, is_dropped BOOL, is_mastered BOOL, comment VARCHAR);
