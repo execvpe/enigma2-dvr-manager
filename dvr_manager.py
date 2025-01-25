@@ -133,7 +133,7 @@ class RecordingFactory:
     def from_database(basepath: str) -> Optional[Recording]:
         basename = os.path.basename(basepath)
 
-        if (rec := db_load(basename)) is None:
+        if (rec := db_load_rec(basename)) is None:
             return None
 
         assert rec.file_size == os.stat(basepath + E2_VIDEO_EXTENSION).st_size, str(rec)
@@ -143,8 +143,8 @@ class RecordingFactory:
         return rec
 
     @staticmethod
-    def from_database_mastered() -> list[Recording]:
-        if (all_mastered := db_load_mastered_all()) is None:
+    def from_database_mastered_all() -> list[Recording]:
+        if (all_mastered := db_load_rec_mastered_all()) is None:
             return []
 
         for r in all_mastered:
@@ -340,7 +340,7 @@ def db_init() -> None:
                   is_good BOOL, is_dropped BOOL, is_mastered BOOL, comment VARCHAR);
               """)
 
-def db_load(basename: str) -> Optional[Recording]:
+def db_load_rec(basename: str) -> Optional[Recording]:
     c = database.cursor()
     c.execute("""
               SELECT file_basename, file_size,
@@ -364,7 +364,7 @@ def db_load(basename: str) -> Optional[Recording]:
 
     return rec
 
-def db_load_mastered_all() -> Optional[list[Recording]]:
+def db_load_rec_mastered_all() -> Optional[list[Recording]]:
     c = database.cursor()
     c.execute("""
               SELECT file_basename, file_size,
@@ -500,7 +500,7 @@ def process_recordings(files: list[str]) -> None:
             print(f"{f}.meta not found! Skipping...", file=sys.stderr)
 
     # Always load mastered recordings from database, even if they are deleted
-    deleted = [rec for rec in RecordingFactory.from_database_mastered() if rec not in recordings]
+    deleted = [rec for rec in RecordingFactory.from_database_mastered_all() if rec not in recordings]
     recordings.extend(deleted)
 
     print(f"Recordings successfully processed: {len(recordings)} total recordings | {len(files)} files ({db_count} in cache, {len(files) - db_count} new) and {len(deleted)} deleted after mastering", file=sys.stderr)
