@@ -480,7 +480,7 @@ def get_files_from_directory(dirs: list[str]) -> list[str]:
 
     return files
 
-def process_recording_files(files: list[str]) -> None:
+def process_recordings(files: list[str]) -> None:
     print("Processing recordings... (This may take a while)", file=sys.stderr)
 
     db_count = 0
@@ -499,7 +499,11 @@ def process_recording_files(files: list[str]) -> None:
         except FileNotFoundError:
             print(f"{f}.meta not found! Skipping...", file=sys.stderr)
 
-    print(f"Successfully processed {len(files)} recordings. ({db_count} in cache, {len(files) - db_count} new)", file=sys.stderr)
+    # Always load mastered recordings from database, even if they are deleted
+    deleted = [rec for rec in RecordingFactory.from_database_mastered() if rec not in recordings]
+    recordings.extend(deleted)
+
+    print(f"Recordings successfully processed: {len(recordings)} total recordings | {len(files)} files ({db_count} in cache, {len(files) - db_count} new) and {len(deleted)} deleted after mastering", file=sys.stderr)
 
 def main(argc: int, argv: list[str]) -> None:
     if argc < 2:
@@ -508,10 +512,7 @@ def main(argc: int, argv: list[str]) -> None:
     db_init()
 
     # Crawl directory tree for recordings, search cache, add them to the list
-    process_recording_files(get_files_from_directory(argv[1:]))
-
-    # Always load mastered recordings from database
-    recordings.extend(r for r in RecordingFactory.from_database_mastered() if r not in recordings)
+    process_recordings(get_files_from_directory(argv[1:]))
 
     radios_metadata = (("groupkey", QueryType.ATTRIBUTE), SortOrder.ASC)
     sort_recordings(radios_metadata[0][0], radios_metadata[0][1], radios_metadata[1])
