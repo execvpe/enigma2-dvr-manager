@@ -83,7 +83,7 @@ class Recording(Entry):
         dt = datetime.strptime(self.timestamp, "%Y-%m-%d %H:%M")
         dt += timedelta(seconds=self.video_duration)
 
-        return datetime.strftime(dt ,"%H:%M")
+        return datetime.strftime(dt, "%H:%M")
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Recording):
@@ -212,6 +212,7 @@ def to_GiB(size: int) -> float:
     return size / 1_073_741_824
 
 def drop_recording(rec: Recording) -> None:
+    assert isinstance(rec, Recording)
     with open(DROPPED_FILE, "a", encoding="utf-8") as f:
         for e in E2_EXTENSIONS:
             assert rec.basepath is not None
@@ -236,6 +237,7 @@ def update_attribute(recs: list[Recording],
     if len(recs) == 0:
         return
     for r in recs:
+        assert isinstance(r, Recording)
         if check(r):
             update(r)
             db_save(r)
@@ -245,6 +247,7 @@ def update_attribute(recs: list[Recording],
     gui_reselect(recs)
 
 def get_video_metadata(rec: Recording) -> tuple[int, int, int, int]:
+    assert isinstance(rec, Recording)
     assert rec.basepath is not None
     vid = cv2.VideoCapture(rec.basepath + E2_VIDEO_EXTENSION)
 
@@ -260,6 +263,7 @@ def get_video_metadata(rec: Recording) -> tuple[int, int, int, int]:
     return (duration, height, width, fps)
 
 def get_eit_data(rec: Recording) -> str:
+    assert isinstance(rec, Recording)
     assert rec.basepath is not None
     with open(rec.basepath + E2_EIT_EXTENSION, "rb") as f:
         # Filter out non-printable charactes / header information
@@ -346,6 +350,7 @@ def gui_find(find_string: str) -> int:
 
 def gui_recolor(window: sg.Window) -> None:
     for i, r in enumerate(global_entrylist):
+        assert isinstance(r, Recording)
         if r.is_dropped:
             window["recordingBox"].widget.itemconfig(i, fg="white", bg="red")
             continue
@@ -492,6 +497,7 @@ def db_rank(order_by: str, query_type: QueryType, sort_order: SortOrder) -> dict
     return dict(c.fetchall())
 
 def db_save(rec: Recording) -> None:
+    assert isinstance(rec, Recording)
     db_remove(rec)
     c = database.cursor()
     c.execute("""
@@ -514,6 +520,7 @@ def db_save(rec: Recording) -> None:
     database.commit()
 
 def db_remove(rec: Recording) -> None:
+    assert isinstance(rec, Recording)
     c = database.cursor()
     c.execute("""
               DELETE FROM recordings
