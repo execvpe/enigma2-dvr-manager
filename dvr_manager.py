@@ -96,6 +96,37 @@ class Recording(Entry):
     def __repr__(self) -> str:
         return f"{self.__attributes()} | {self.timestamp} - {self.__endtime()} | {(to_GiB(self.file_size)):4.1f} GiB | {(self.video_duration // 60):3d}' | {fit_string(self.epg_channel, 10, 2).ljust(10)} | {fit_string(self.epg_title, 45, 7).ljust(45)} | {self.epg_description}"
 
+class Download(Entry):
+    dl_key: str
+    dl_source: str
+    dl_title: str
+    dl_description: str
+    video_duration: int
+    video_height: int
+    video_width: int
+    video_fps: int
+    groupkey: str
+    sortkey: int
+    comment: str
+    timestamp: str
+
+    def hd(self) -> bool:
+        return self.video_height >= 720
+
+    def __attributes(self) -> str:
+        return f"   {'C' if len(self.comment) > 0 else '.'}"
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Download):
+            return False
+        return self.dl_key == other.dl_key
+
+    def __hash__(self) -> int:
+        return self.dl_key.__hash__()
+
+    def __repr__(self) -> str:
+        return f"{self.__attributes()} | {self.timestamp} | {(to_GiB(self.file_size)):4.1f} GiB | {(self.video_duration // 60):3d}' | {fit_string(self.dl_source, 10, 2).ljust(10)} | {fit_string(self.dl_title, 45, 7).ljust(45)} | {self.dl_description}"
+
 # Global entry list
 global_entrylist: list[Entry] = []
 # FreeSimpleGUI window object
@@ -155,6 +186,13 @@ class RecordingFactory:
             r.file_size = 0
 
         return all_mastered
+
+class DownloadFactory:
+    @staticmethod
+    def from_database_all() -> list[Download]:
+        if (all_downloads := db_load_dl_all()) is None:
+            return []
+        return all_downloads
 
 # Remove everything that is not a letter or digit
 def make_groupkey(line: str) -> str:
@@ -343,6 +381,15 @@ def db_init() -> None:
                   is_good BOOL, is_dropped BOOL, is_mastered BOOL, comment VARCHAR);
               """)
 
+    c.execute("""
+              CREATE TABLE IF NOT EXISTS
+                downloads(dl_key VARCHAR PRIMARY KEY,
+                  groupkey VARCHAR, timestamp DATETIME,
+                  dl_source VARCHAR, dl_title VARCHAR, dl_description VARCHAR,
+                  video_duration INT, video_height INT, video_width INT, video_fps INT,
+                  comment VARCHAR);
+              """)
+
 def db_load_rec(basename: str) -> Optional[Recording]:
     c = database.cursor()
     c.execute("""
@@ -366,6 +413,31 @@ def db_load_rec(basename: str) -> Optional[Recording]:
     rec.timestamp = raw[14]
 
     return rec
+
+def db_load_dl_all(basename: str) -> Optional[list[Download]]:
+    c = database.cursor()
+    c.execute("""
+              SELECT dl_key,
+                dl_source, dl_title, dl_description,
+                video_duration, video_height, video_width, video_fps,
+                groupkey, comment, timestamp
+              FROM downloads;
+              """)
+
+    if len(all_raw := c.fetchall()) == 0:
+        return None
+
+    all_downloads = []
+    for raw in all_raw:
+        dl = Download()
+        dl.dl_key = raw[0]
+        dl.dl_source, dl.dl_title, dl.dl_description = raw[1], raw[2], raw[3]
+        dl.video_duration, dl.video_height, dl.video_width, dl.video_fps = raw[4], raw[5], raw[6], raw[7]
+        dl.groupkey, dl.comment, dl.timestamp = raw[8], raw[9], raw[10]
+
+        all_downloads.append(dl)
+
+    return all_downloads
 
 def db_load_rec_mastered_all() -> Optional[list[Recording]]:
     c = database.cursor()
