@@ -51,7 +51,10 @@ class SortOrder(Enum):
     def __str__(self) -> str:
         return super().__str__().strip(f"{self.__class__.__name__}.")
 
-class Recording:
+class Entry:
+    pass
+
+class Recording(Entry):
     basepath: Optional[str]
     file_basename: str
     file_size: int
@@ -93,8 +96,8 @@ class Recording:
     def __repr__(self) -> str:
         return f"{self.__attributes()} | {self.timestamp} - {self.__endtime()} | {(to_GiB(self.file_size)):4.1f} GiB | {(self.video_duration // 60):3d}' | {fit_string(self.epg_channel, 10, 2).ljust(10)} | {fit_string(self.epg_title, 45, 7).ljust(45)} | {self.epg_description}"
 
-# Recording objects
-global_entrylist: list[Recording] = []
+# Global entry list
+global_entrylist: list[Entry] = []
 # FreeSimpleGUI window object
 window: sg.Window
 # Recording cache database
