@@ -503,7 +503,7 @@ def process_recordings(files: list[str]) -> None:
     deleted = [rec for rec in RecordingFactory.from_database_mastered_all() if rec not in global_entrylist]
     global_entrylist.extend(deleted)
 
-    print(f"Recordings successfully processed: {len(global_entrylist)} total recordings | {len(files)} files ({db_count} in cache, {len(files) - db_count} new) and {len(deleted)} deleted after mastering", file=sys.stderr)
+    print(f"Recordings successfully processed: {len(global_entrylist)} total entries | {len(files)} files ({db_count} in cache, {len(files) - db_count} new) and {len(deleted)} deleted after mastering", file=sys.stderr)
 
 def main(argc: int, argv: list[str]) -> None:
     if argc < 2:
@@ -538,7 +538,7 @@ def main(argc: int, argv: list[str]) -> None:
             radios_metadata_previous = radios_metadata
 
 
-        window["informationTxt"].update(f"{len(selected_recodings)} item(s) (approx. {to_GiB(sum(r.file_size for r in selected_recodings)):.1f} GiB) selected for drop | {len(good_recodings)} recordings good | {len(mastered_recodings)} mastered | {len(global_entrylist)} total")
+        window["informationTxt"].update(f"{len(selected_recodings)} entries (approx. {to_GiB(sum(r.file_size for r in selected_recodings)):.1f} GiB) selected for drop | {len(good_recodings)} good | {len(mastered_recodings)} mastered | {len(global_entrylist)} total")
 
         gui_recolor(window)
         event, _ = window.read()
@@ -551,7 +551,7 @@ def main(argc: int, argv: list[str]) -> None:
         if len(recordingBox_selected_rec) > 0:
             r = recordingBox_selected_rec[0]
             window["metaTxt"].update(f"{r.video_width:4d}x{r.video_height:4d} @ {r.video_fps} fps")
-            window["selectionTxt"].update(f"{len(recordingBox_selected_rec)} recording(s) under cursor")
+            window["selectionTxt"].update(f"{len(recordingBox_selected_rec)} entries under cursor")
             window["commentMul"].update(recordingBox_selected_rec[0].comment)
 
         # [C]omment
@@ -600,7 +600,7 @@ def main(argc: int, argv: list[str]) -> None:
                     sys.exit()
 
                 matches_found = gui_find(window["findInput"].get())
-                window["selectionTxt"].update(f"{matches_found} matching recording(s) found")
+                window["selectionTxt"].update(f"{matches_found} matching entries found")
 
                 if event == "Escape:9":
                     break
