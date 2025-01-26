@@ -95,7 +95,7 @@ class Recording:
 
 # Recording objects
 global_entrylist: list[Recording] = []
-# PySimpleGUI window object
+# FreeSimpleGUI window object
 window: sg.Window
 # Recording cache database
 database = sqlite3.connect("database.sqlite3")
