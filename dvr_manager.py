@@ -98,7 +98,7 @@ recordings: list[Recording] = []
 # PySimpleGUI window object
 window: sg.Window
 # Recording cache database
-database = sqlite3.connect("recordings.sqlite3")
+database = sqlite3.connect("database.sqlite3")
 
 class RecordingFactory:
     @staticmethod
