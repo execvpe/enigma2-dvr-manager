@@ -94,7 +94,7 @@ class Recording:
         return f"{self.__attributes()} | {self.timestamp} - {self.__endtime()} | {(to_GiB(self.file_size)):4.1f} GiB | {(self.video_duration // 60):3d}' | {fit_string(self.epg_channel, 10, 2).ljust(10)} | {fit_string(self.epg_title, 45, 7).ljust(45)} | {self.epg_description}"
 
 # Recording objects
-recordings: list[Recording] = []
+global_entrylist: list[Recording] = []
 # PySimpleGUI window object
 window: sg.Window
 # Recording cache database
@@ -179,15 +179,15 @@ def drop_recording(rec: Recording) -> None:
                 print(filepath, file=f)
     db_remove(rec)
 
-def sort_recordings(order_by: str, query_type: QueryType, sort_order: SortOrder) -> None:
+def sort_global_entrylist(order_by: str, query_type: QueryType, sort_order: SortOrder) -> None:
     key_ranks = db_rank(order_by, query_type, sort_order)
     if query_type == QueryType.ATTRIBUTE:
-        for r in recordings:
+        for r in global_entrylist:
             r.sortkey = key_ranks.get(r.file_basename, 0)
     if query_type == QueryType.AGGREGATE:
-        for r in recordings:
+        for r in global_entrylist:
             r.sortkey = key_ranks.get(r.groupkey, 0)
-    recordings.sort(key=lambda r: r.sortkey)
+    global_entrylist.sort(key=lambda r: r.sortkey)
 
 def update_attribute(recs: list[Recording],
                      check: Callable[[Recording], bool],
@@ -198,7 +198,7 @@ def update_attribute(recs: list[Recording],
         if check(r):
             update(r)
             db_save(r)
-            i = recordings.index(r)
+            i = global_entrylist.index(r)
             window["recordingBox"].widget.delete(i)
             window["recordingBox"].widget.insert(i, r)
     gui_reselect(recs)
@@ -274,7 +274,7 @@ def gui_init() -> None:
                                 font=GUI_FONT,
                                 disabled=True)],
                   [sg.Listbox(key="recordingBox",
-                              values=recordings,
+                              values=global_entrylist,
                               size=(1280, 720),
                               enable_events=True,
                               font=GUI_FONT,
@@ -294,7 +294,7 @@ def gui_init() -> None:
 
 def gui_find(find_string: str) -> int:
     matches = []
-    for i, r in enumerate(recordings):
+    for i, r in enumerate(global_entrylist):
         if r.groupkey.startswith(make_groupkey(find_string)):
             matches.append(i)
 
@@ -304,7 +304,7 @@ def gui_find(find_string: str) -> int:
     return len(matches)
 
 def gui_recolor(window: sg.Window) -> None:
-    for i, r in enumerate(recordings):
+    for i, r in enumerate(global_entrylist):
         if r.is_dropped:
             window["recordingBox"].widget.itemconfig(i, fg="white", bg="red")
             continue
@@ -324,7 +324,7 @@ def gui_recolor(window: sg.Window) -> None:
         window["recordingBox"].widget.itemconfig(i, fg="white", bg="black")
 
 def gui_reselect(recs: list[Recording]) -> None:
-    jump_indices = [i for i, r in enumerate(recordings) if r in recs]
+    jump_indices = [i for i, r in enumerate(global_entrylist) if r in recs]
     for i in jump_indices:
         window["recordingBox"].widget.selection_set(i)
     window["recordingBox"].widget.see(jump_indices[0])
@@ -488,22 +488,22 @@ def process_recordings(files: list[str]) -> None:
         print(f"Processing recording {i + 1} of {len(files)}", end="\r", file=sys.stderr)
         basepath = re.sub(rf"\{E2_VIDEO_EXTENSION}$", "", f)
         if (rec := RecordingFactory.from_database(basepath)) is not None:
-            recordings.append(rec)
+            global_entrylist.append(rec)
             db_count += 1
             continue
         try:
             with open(basepath + E2_META_EXTENSION, "r", encoding="utf-8") as m:
                 rec = RecordingFactory.from_meta_file(basepath, m.readlines())
                 db_save(rec)
-                recordings.append(rec)
+                global_entrylist.append(rec)
         except FileNotFoundError:
             print(f"{f}.meta not found! Skipping...", file=sys.stderr)
 
     # Always load mastered recordings from database, even if they are deleted
-    deleted = [rec for rec in RecordingFactory.from_database_mastered_all() if rec not in recordings]
-    recordings.extend(deleted)
+    deleted = [rec for rec in RecordingFactory.from_database_mastered_all() if rec not in global_entrylist]
+    global_entrylist.extend(deleted)
 
-    print(f"Recordings successfully processed: {len(recordings)} total recordings | {len(files)} files ({db_count} in cache, {len(files) - db_count} new) and {len(deleted)} deleted after mastering", file=sys.stderr)
+    print(f"Recordings successfully processed: {len(global_entrylist)} total recordings | {len(files)} files ({db_count} in cache, {len(files) - db_count} new) and {len(deleted)} deleted after mastering", file=sys.stderr)
 
 def main(argc: int, argv: list[str]) -> None:
     if argc < 2:
@@ -515,15 +515,15 @@ def main(argc: int, argv: list[str]) -> None:
     process_recordings(get_files_from_directory(argv[1:]))
 
     radios_metadata = (("groupkey", QueryType.ATTRIBUTE), SortOrder.ASC)
-    sort_recordings(radios_metadata[0][0], radios_metadata[0][1], radios_metadata[1])
+    sort_global_entrylist(radios_metadata[0][0], radios_metadata[0][1], radios_metadata[1])
     radios_metadata_previous = radios_metadata
 
     gui_init()
 
     while True:
-        selected_recodings = [r for r in recordings if r.is_dropped]
-        good_recodings = [r for r in recordings if r.is_good]
-        mastered_recodings = [r for r in recordings if r.is_mastered]
+        selected_recodings = [r for r in global_entrylist if r.is_dropped]
+        good_recodings = [r for r in global_entrylist if r.is_good]
+        mastered_recodings = [r for r in global_entrylist if r.is_mastered]
 
         radios_metadata = tuple(r.metadata for r in window.element_list() if isinstance(r, sg.Radio) and r.get())
         if isinstance(radios_metadata[0], SortOrder):
@@ -531,14 +531,14 @@ def main(argc: int, argv: list[str]) -> None:
 
         if radios_metadata != radios_metadata_previous:
             recordingBox_selected_rec = window["recordingBox"].get()
-            sort_recordings(radios_metadata[0][0], radios_metadata[0][1], radios_metadata[1])
-            window["recordingBox"].update(recordings)
+            sort_global_entrylist(radios_metadata[0][0], radios_metadata[0][1], radios_metadata[1])
+            window["recordingBox"].update(global_entrylist)
             if len(recordingBox_selected_rec) > 0:
                 gui_reselect(recordingBox_selected_rec)
             radios_metadata_previous = radios_metadata
 
 
-        window["informationTxt"].update(f"{len(selected_recodings)} item(s) (approx. {to_GiB(sum(r.file_size for r in selected_recodings)):.1f} GiB) selected for drop | {len(good_recodings)} recordings good | {len(mastered_recodings)} mastered | {len(recordings)} total")
+        window["informationTxt"].update(f"{len(selected_recodings)} item(s) (approx. {to_GiB(sum(r.file_size for r in selected_recodings)):.1f} GiB) selected for drop | {len(good_recodings)} recordings good | {len(mastered_recodings)} mastered | {len(global_entrylist)} total")
 
         gui_recolor(window)
         event, _ = window.read()
@@ -669,12 +669,12 @@ def main(argc: int, argv: list[str]) -> None:
         # Drop button pressed
         if event == "dropBtn":
             for_deletion = set()
-            for r in [x for x in recordings if x.is_dropped]:
+            for r in [x for x in global_entrylist if x.is_dropped]:
                 drop_recording(r)
                 for_deletion.add(r)
             for r in for_deletion:
-                recordings.remove(r)
-            window["recordingBox"].update(recordings)
+                global_entrylist.remove(r)
+            window["recordingBox"].update(global_entrylist)
 
 if __name__ == "__main__":
     main(len(sys.argv), sys.argv)
