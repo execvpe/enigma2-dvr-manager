@@ -231,12 +231,12 @@ def sort_global_entrylist(order_by: str, query_type: QueryType, sort_order: Sort
             r.sortkey = key_ranks.get(r.groupkey, 0)
     global_entrylist.sort(key=lambda r: r.sortkey)
 
-def update_attribute(recs: list[Recording],
+def update_attribute(recordings: list[Recording],
                      check: Callable[[Recording], bool],
                      update: Callable[[Recording], None]) -> None:
-    if len(recs) == 0:
+    if len(recordings) == 0:
         return
-    for r in recs:
+    for r in recordings:
         assert isinstance(r, Recording)
         if check(r):
             update(r)
@@ -244,7 +244,7 @@ def update_attribute(recs: list[Recording],
             i = global_entrylist.index(r)
             window["recordingBox"].widget.delete(i)
             window["recordingBox"].widget.insert(i, r)
-    gui_reselect(recs)
+    gui_reselect(recordings)
 
 def get_video_metadata(rec: Recording) -> tuple[int, int, int, int]:
     assert isinstance(rec, Recording)
@@ -274,7 +274,7 @@ def get_eit_data(rec: Recording) -> str:
 def gui_init() -> None:
     sg.change_look_and_feel("Dark Black")
 
-    gui_layout = [[sg.Column([[sg.Text(key="informationTxt",
+    gui_layout = [[sg.Column([[sg.Text(key="informationText",
                                font=GUI_FONT)],
                               [sg.HorizontalSeparator(color="green")],
                               [sg.Text("[F]ind | [I]nformation | [O]pen in VLC | [C]omment | [D]rop | [G]ood | [M]astered | Undo: [Shift + 'Key']",
@@ -302,9 +302,9 @@ def gui_init() -> None:
                               [sg.Radio("ASC", "orderRadio", font=GUI_FONT, enable_events=True, default=True, metadata=SortOrder.ASC)],
                               [sg.Radio("DESC", "orderRadio", font=GUI_FONT, enable_events=True, metadata=SortOrder.DESC)]])],
                               [sg.HorizontalSeparator(color="green")],
-                              [sg.Text("SELECT Mode", key="metaTxt", font=GUI_FONT, text_color="yellow"),
+                              [sg.Text("SELECT Mode", key="metaText", font=GUI_FONT, text_color="yellow"),
                                sg.VerticalSeparator(color="green"),
-                               sg.Text(key="selectionTxt", font=GUI_FONT, text_color="yellow"),
+                               sg.Text(key="selectionText", font=GUI_FONT, text_color="yellow"),
                                sg.Push(),
                                sg.Input(key="findInput",
                                             size=40,
@@ -312,7 +312,7 @@ def gui_init() -> None:
                                             do_not_clear=False,
                                             disabled=True),
                                sg.VerticalSeparator(color="green"),
-                               sg.Button("Drop", key="dropBtn")],]),
+                               sg.Button("Drop", key="dropButton")],]),
                    sg.Push(),
                    sg.Multiline(key="commentMul",
                                 size=(80, 6),
@@ -326,7 +326,7 @@ def gui_init() -> None:
                               select_mode=sg.LISTBOX_SELECT_MODE_EXTENDED)]]
 
     global window
-    window = sg.Window(title="DVR Duplicate Removal Tool",
+    window = sg.Window(title="Enigma2 DVR Manager",
                        layout=gui_layout,
                        return_keyboard_events=True,
                        resizable=True,
@@ -339,8 +339,8 @@ def gui_init() -> None:
 
 def gui_find(find_string: str) -> int:
     matches = []
-    for i, r in enumerate(global_entrylist):
-        if r.groupkey.startswith(make_groupkey(find_string)):
+    for i, e in enumerate(global_entrylist):
+        if e.groupkey.startswith(make_groupkey(find_string)):
             matches.append(i)
 
     if len(matches) > 0:
@@ -369,8 +369,8 @@ def gui_recolor(window: sg.Window) -> None:
 
         window["recordingBox"].widget.itemconfig(i, fg="white", bg="black")
 
-def gui_reselect(recs: list[Recording]) -> None:
-    jump_indices = [i for i, r in enumerate(global_entrylist) if r in recs]
+def gui_reselect(entries: list[Entry]) -> None:
+    jump_indices = [i for i, e in enumerate(global_entrylist) if e in entries]
     for i in jump_indices:
         window["recordingBox"].widget.selection_set(i)
     window["recordingBox"].widget.see(jump_indices[0])
@@ -620,7 +620,7 @@ def main(argc: int, argv: list[str]) -> None:
             radios_metadata_previous = radios_metadata
 
 
-        window["informationTxt"].update(f"{len(selected_recodings)} entries (approx. {to_GiB(sum(r.file_size for r in selected_recodings)):.1f} GiB) selected for drop | {len(good_recodings)} good | {len(mastered_recodings)} mastered | {len(global_entrylist)} total")
+        window["informationText"].update(f"{len(selected_recodings)} entries (approx. {to_GiB(sum(r.file_size for r in selected_recodings)):.1f} GiB) selected for drop | {len(good_recodings)} good | {len(mastered_recodings)} mastered | {len(global_entrylist)} total")
 
         gui_recolor(window)
         event, _ = window.read()
@@ -632,16 +632,16 @@ def main(argc: int, argv: list[str]) -> None:
 
         if len(recordingBox_selected_rec) > 0:
             r = recordingBox_selected_rec[0]
-            window["metaTxt"].update(f"{r.video_width:4d}x{r.video_height:4d} @ {r.video_fps} fps")
-            window["selectionTxt"].update(f"{len(recordingBox_selected_rec)} entries under cursor")
+            window["metaText"].update(f"{r.video_width:4d}x{r.video_height:4d} @ {r.video_fps} fps")
+            window["selectionText"].update(f"{len(recordingBox_selected_rec)} entries under cursor")
             window["commentMul"].update(recordingBox_selected_rec[0].comment)
 
         # [C]omment
         if ((event == "c:54" and len(recordingBox_selected_rec) == 1)
         or ( event == "C:54" and len(recordingBox_selected_rec) >  0)):
             window["recordingBox"].update(disabled=True)
-            window["dropBtn"].update(disabled=True)
-            window["metaTxt"].update("COMMENT Mode | Submit: [ESC]")
+            window["dropButton"].update(disabled=True)
+            window["metaText"].update("COMMENT Mode | Submit: [ESC]")
             window["commentMul"].update(disabled=False)
             window["commentMul"].set_focus()
 
@@ -658,8 +658,8 @@ def main(argc: int, argv: list[str]) -> None:
                 break
 
             window["commentMul"].update(disabled=True)
-            window["dropBtn"].update(disabled=False)
-            window["metaTxt"].update("SELECT Mode")
+            window["dropButton"].update(disabled=False)
+            window["metaText"].update("SELECT Mode")
             window["recordingBox"].update(disabled=False)
             update_attribute(recordingBox_selected_rec,
                              lambda r: True,
@@ -670,8 +670,8 @@ def main(argc: int, argv: list[str]) -> None:
         # [F]ind
         if event == "f:41":
             window["recordingBox"].update(disabled=True)
-            window["dropBtn"].update(disabled=True)
-            window["metaTxt"].update("FIND Mode | Submit: [ESC]")
+            window["dropButton"].update(disabled=True)
+            window["metaText"].update("FIND Mode | Submit: [ESC]")
             window["findInput"].update("", disabled=False)
             window["findInput"].set_focus()
 
@@ -682,14 +682,14 @@ def main(argc: int, argv: list[str]) -> None:
                     sys.exit()
 
                 matches_found = gui_find(window["findInput"].get())
-                window["selectionTxt"].update(f"{matches_found} matching entries found")
+                window["selectionText"].update(f"{matches_found} matching entries found")
 
                 if event == "Escape:9":
                     break
 
             window["findInput"].update(disabled=True)
-            window["dropBtn"].update(disabled=False)
-            window["metaTxt"].update("SELECT Mode")
+            window["dropButton"].update(disabled=False)
+            window["metaText"].update("SELECT Mode")
             window["recordingBox"].update(disabled=False)
             window["recordingBox"].set_focus()
             continue
@@ -749,7 +749,7 @@ def main(argc: int, argv: list[str]) -> None:
             continue
 
         # Drop button pressed
-        if event == "dropBtn":
+        if event == "dropButton":
             for_deletion = set()
             for r in [x for x in global_entrylist if x.is_dropped]:
                 drop_recording(r)
