@@ -98,7 +98,10 @@ class Recording(Entry):
         return f"{self.__attributes()} | {self.timestamp} - {self.__endtime()} | {(to_GiB(self.file_size)):4.1f} GiB | {(self.video_duration // 60):3d}' | {fit_string(self.epg_channel, 10, 2).ljust(10)} | {fit_string(self.epg_title, 45, 7).ljust(45)} | {self.epg_description}"
 
 class Download(Entry):
-    dl_key: str
+    basepath: Optional[str]
+    file_basename: str
+    file_extension: str
+    file_size: int
     dl_source: str
     dl_title: str
     dl_description: str
@@ -109,7 +112,6 @@ class Download(Entry):
     groupkey: str
     sortkey: int
     comment: str
-    timestamp: str
 
     def hd(self) -> bool:
         return self.video_height >= 720
@@ -120,13 +122,13 @@ class Download(Entry):
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Download):
             return False
-        return self.dl_key == other.dl_key
+        return self.file_basename == other.file_basename
 
     def __hash__(self) -> int:
-        return self.dl_key.__hash__()
+        return self.file_basename.__hash__()
 
     def __repr__(self) -> str:
-        return f"{self.__attributes()} | {self.timestamp} | {(to_GiB(self.file_size)):4.1f} GiB | {(self.video_duration // 60):3d}' | {fit_string(self.dl_source, 10, 2).ljust(10)} | {fit_string(self.dl_title, 45, 7).ljust(45)} | {self.dl_description}"
+        return f"{self.__attributes()} | {fit_string(self.dl_source, 24, 2).ljust(24)} |      --- | {(self.video_duration // 60):3d}' |        --- | {fit_string(self.dl_title, 45, 7).ljust(45)} | {self.dl_description}"
 
 # Global entry list
 global_entrylist: list[Entry] = []
@@ -396,8 +398,8 @@ def db_init() -> None:
 
     c.execute("""
               CREATE TABLE IF NOT EXISTS
-                downloads(dl_key VARCHAR PRIMARY KEY,
-                  groupkey VARCHAR, timestamp DATETIME,
+                downloads(file_basename VARCHAR PRIMARY KEY,
+                  groupkey VARCHAR, file_size INT,
                   dl_source VARCHAR, dl_title VARCHAR, dl_description VARCHAR,
                   video_duration INT, video_height INT, video_width INT, video_fps INT,
                   comment VARCHAR);
@@ -427,13 +429,13 @@ def db_load_rec(basename: str) -> Optional[Recording]:
 
     return rec
 
-def db_load_dl_all(basename: str) -> Optional[list[Download]]:
+def db_load_dl_all() -> Optional[list[Download]]:
     c = database.cursor()
     c.execute("""
-              SELECT dl_key,
+              SELECT file_basename,
                 dl_source, dl_title, dl_description,
                 video_duration, video_height, video_width, video_fps,
-                groupkey, comment, timestamp
+                groupkey, comment
               FROM downloads;
               """)
 
@@ -443,10 +445,10 @@ def db_load_dl_all(basename: str) -> Optional[list[Download]]:
     all_downloads = []
     for raw in all_raw:
         dl = Download()
-        dl.dl_key = raw[0]
+        dl.file_basename = raw[0]
         dl.dl_source, dl.dl_title, dl.dl_description = raw[1], raw[2], raw[3]
         dl.video_duration, dl.video_height, dl.video_width, dl.video_fps = raw[4], raw[5], raw[6], raw[7]
-        dl.groupkey, dl.comment, dl.timestamp = raw[8], raw[9], raw[10]
+        dl.groupkey, dl.comment = raw[8], raw[9]
 
         all_downloads.append(dl)
 
