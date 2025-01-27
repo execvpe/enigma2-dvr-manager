@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import json
 import os
 import re
 import sqlite3
@@ -587,14 +588,15 @@ def process_recordings(files: list[str]) -> None:
 
     print(f"Recordings successfully processed: {len(global_entrylist)} total entries | {len(files)} files ({db_count} in cache, {len(files) - db_count} new) and {len(deleted)} deleted after mastering", file=sys.stderr)
 
-def main(argc: int, argv: list[str]) -> None:
-    if argc < 2:
-        raise IndexError(f"Usage: {argv[0]} <dir path> [dir path ...]")
 
+def main() -> None:
     db_init()
 
+    with open("config.json") as f:
+        config = json.load(f)
+
     # Crawl directory tree for recordings, search cache, add them to the list
-    process_recordings(get_files_from_directory(argv[1:]))
+    process_recordings(get_files_from_directory(config["rec_paths"]))
 
     radios_metadata = (("groupkey", QueryType.ATTRIBUTE), SortOrder.ASC)
     sort_global_entrylist(radios_metadata[0][0], radios_metadata[0][1], radios_metadata[1])
@@ -759,4 +761,4 @@ def main(argc: int, argv: list[str]) -> None:
             window["recordingBox"].update(global_entrylist)
 
 if __name__ == "__main__":
-    main(len(sys.argv), sys.argv)
+    main()
