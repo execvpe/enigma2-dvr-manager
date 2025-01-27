@@ -137,7 +137,14 @@ database = sqlite3.connect("database.sqlite3")
 
 class RecordingFactory:
     @staticmethod
-    def from_meta_file(basepath: str, meta: list[str]) -> Recording:
+    def from_meta_file(basepath: str, meta_file_extension: str) -> Recording:
+        try:
+            with open(basepath + meta_file_extension, "r", encoding="utf-8") as m:
+                meta = m.readlines()
+        except FileNotFoundError:
+            print(f"Meta file for {basepath} not found! Skipping...", file=sys.stderr)
+            return None
+
         rec = Recording()
 
         rec.basepath = basepath
@@ -531,33 +538,33 @@ def db_remove(rec: Recording) -> None:
     assert c.rowcount <= 1
     database.commit()
 
-def all_recordings_in(dirpath: str) -> list[str]:
-    all_files = []
+def get_files_in_directory(directory_path: str, file_extensions: tuple[str]) -> list[str]:
+    files = []
     try:
-        for f in os.listdir(dirpath):
-            filepath = os.path.join(dirpath, f)
+        for f in os.listdir(directory_path):
+            file_path = os.path.join(directory_path, f)
 
-            if os.path.isdir(filepath):
-                all_files += all_recordings_in(filepath)
+            if os.path.isdir(file_path):
+                files += get_files_in_directory(file_path, file_extensions)
                 continue
 
-            if not os.path.isfile(filepath):
+            if not os.path.isfile(file_path):
                 continue
 
-            if f.endswith(E2_VIDEO_EXTENSION):
-                all_files.append(filepath)
+            if f.endswith(file_extensions):
+                files.append(file_path)
     except PermissionError:
         pass
 
-    return all_files
+    return files
 
-def get_files_from_directory(dirs: list[str]) -> list[str]:
+def scan_directories(dirs: list[str], file_extensions: list[str]) -> list[str]:
     print("Scanning directories... (This may take a while)", file=sys.stderr)
 
     files = []
     for i, d in enumerate(dirs):
         print(f"Scanning directory: {i + 1} of {len(dirs)}", end="\r", file=sys.stderr)
-        files += all_recordings_in(d)
+        files += get_files_in_directory(d, tuple(file_extensions))
 
     print(f"Successfully scanned {len(dirs)} directories.", file=sys.stderr)
 
@@ -569,18 +576,15 @@ def process_recordings(files: list[str]) -> None:
     db_count = 0
     for i, f in enumerate(files):
         print(f"Processing recording {i + 1} of {len(files)}", end="\r", file=sys.stderr)
-        basepath = re.sub(rf"\{E2_VIDEO_EXTENSION}$", "", f)
+        basepath = os.path.splitext(f)[0]
         if (rec := RecordingFactory.from_database(basepath)) is not None:
             global_entrylist.append(rec)
             db_count += 1
             continue
-        try:
-            with open(basepath + E2_META_EXTENSION, "r", encoding="utf-8") as m:
-                rec = RecordingFactory.from_meta_file(basepath, m.readlines())
-                db_save(rec)
-                global_entrylist.append(rec)
-        except FileNotFoundError:
-            print(f"{f}.meta not found! Skipping...", file=sys.stderr)
+
+        if (rec := RecordingFactory.from_meta_file(basepath, E2_META_EXTENSION)) is not None:
+            db_save_rec(rec)
+            global_entrylist.append(rec)
 
     # Always load mastered recordings from database, even if they are deleted
     deleted = [rec for rec in RecordingFactory.from_database_mastered_all() if rec not in global_entrylist]
@@ -596,7 +600,7 @@ def main() -> None:
         config = json.load(f)
 
     # Crawl directory tree for recordings, search cache, add them to the list
-    process_recordings(get_files_from_directory(config["rec_paths"]))
+    process_recordings(scan_directories(config["rec_paths"], [E2_VIDEO_EXTENSION]))
 
     radios_metadata = (("groupkey", QueryType.ATTRIBUTE), SortOrder.ASC)
     sort_global_entrylist(radios_metadata[0][0], radios_metadata[0][1], radios_metadata[1])
