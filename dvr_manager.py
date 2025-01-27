@@ -26,6 +26,9 @@ E2_EIT_EXTENSION = ".eit"
 # As far as I know there are six files associated to each recording
 E2_EXTENSIONS = [".eit", ".ts", ".ts.ap", ".ts.cuts", ".ts.meta", ".ts.sc"]
 
+# Download file name pattern
+DL_REGEX_PATTERN = re.compile(r"^(.*?) \((\d{4})\) \[(.*?=.*?)\] - (.*?)$")
+
 # A file to which the dropped file paths are appended
 DROPPED_FILE = "dropped"
 
@@ -199,6 +202,27 @@ class RecordingFactory:
 
 class DownloadFactory:
     @staticmethod
+    def from_video_file(basepath: str, video_file_extension: str) -> Download:
+        dl = Download()
+
+        dl.basepath = basepath
+
+        dl.file_basename, dl.file_extension = os.path.basename(basepath), video_file_extension
+
+        assert (match := DL_REGEX_PATTERN.match(dl.file_basename))
+
+        dl.file_size = os.stat(basepath + dl.file_extension).st_size
+
+        dl.dl_source, dl.dl_title = match.group(4), match.group(1)
+        dl.dl_description = f"{match.group(2)} ({match.group(3)})"
+        dl.video_duration, dl.video_height, dl.video_width, dl.video_fps = get_video_metadata(dl)
+        dl.comment = ""
+
+        dl.groupkey = make_groupkey(dl.dl_title)
+
+        return dl
+
+    @staticmethod
     def from_database_all() -> list[Download]:
         if (all_downloads := db_load_dl_all()) is None:
             return []
@@ -234,8 +258,8 @@ def drop_recording(rec: Recording) -> None:
 def sort_global_entrylist(order_by: str, query_type: QueryType, sort_order: SortOrder) -> None:
     key_ranks = db_rank(order_by, query_type, sort_order)
     if query_type == QueryType.ATTRIBUTE:
-        for r in global_entrylist:
-            r.sortkey = key_ranks.get(r.file_basename, 0)
+        for e in global_entrylist:
+                e.sortkey = key_ranks.get(e.file_basename, 0)
     if query_type == QueryType.AGGREGATE:
         for r in global_entrylist:
             r.sortkey = key_ranks.get(r.groupkey, 0)
@@ -256,10 +280,13 @@ def update_attribute(recordings: list[Recording],
             window["recordingBox"].widget.insert(i, r)
     gui_reselect(recordings)
 
-def get_video_metadata(rec: Recording) -> tuple[int, int, int, int]:
-    assert isinstance(rec, Recording)
-    assert rec.basepath is not None
-    vid = cv2.VideoCapture(rec.basepath + E2_VIDEO_EXTENSION)
+def get_video_metadata(entry: Entry) -> tuple[int, int, int, int]:
+    assert entry.basepath is not None
+
+    if isinstance(entry, Recording):
+        vid = cv2.VideoCapture(entry.basepath + E2_VIDEO_EXTENSION)
+    else:
+        vid = cv2.VideoCapture(entry.basepath + entry.file_extension)
 
     fps    = int(vid.get(cv2.CAP_PROP_FPS))
     frames = int(vid.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -359,21 +386,23 @@ def gui_find(find_string: str) -> int:
     return len(matches)
 
 def gui_recolor(window: sg.Window) -> None:
-    for i, r in enumerate(global_entrylist):
-        assert isinstance(r, Recording)
-        if r.is_dropped:
+    for i, e in enumerate(global_entrylist):
+        if not isinstance(e, Recording):
+            continue
+
+        if e.is_dropped:
             window["recordingBox"].widget.itemconfig(i, fg="white", bg="red")
             continue
 
-        if r.is_mastered:
+        if e.is_mastered:
             window["recordingBox"].widget.itemconfig(i, fg="white", bg="blue")
             continue
 
-        if not r.hd():
+        if not e.hd():
             window["recordingBox"].widget.itemconfig(i, fg="grey", bg="black")
             continue
 
-        if r.is_good:
+        if e.is_good:
             window["recordingBox"].widget.itemconfig(i, fg="black", bg="light green")
             continue
 
@@ -529,6 +558,26 @@ def db_save_rec(rec: Recording) -> None:
 
     database.commit()
 
+def db_save_dl(dl: Download) -> None:
+    assert isinstance(dl, Download)
+    db_remove_dl(dl)
+    c = database.cursor()
+    c.execute("""
+              INSERT INTO downloads(file_basename, file_size,
+                dl_source, dl_title, dl_description,
+                video_duration, video_height, video_width, video_fps,
+                groupkey, comment)
+              VALUES (?, ?,
+                ?, ?, ?,
+                ?, ?, ?, ?,
+                ?, ?);
+              """, (dl.file_basename, dl.file_size,
+                    dl.dl_source, dl.dl_title, dl.dl_description,
+                    dl.video_duration, dl.video_height, dl.video_width, dl.video_fps,
+                    dl.groupkey, dl.comment))
+
+    database.commit()
+
 def db_remove_rec(rec: Recording) -> None:
     assert isinstance(rec, Recording)
     c = database.cursor()
@@ -536,6 +585,17 @@ def db_remove_rec(rec: Recording) -> None:
               DELETE FROM recordings
               WHERE file_basename = ?
               """, (rec.file_basename, ))
+
+    assert c.rowcount <= 1
+    database.commit()
+
+def db_remove_dl(dl: Download) -> None:
+    assert isinstance(dl, Download)
+    c = database.cursor()
+    c.execute("""
+              DELETE FROM downloads
+              WHERE file_basename = ?
+              """, (dl.file_basename, ))
 
     assert c.rowcount <= 1
     database.commit()
@@ -594,6 +654,28 @@ def process_recordings(files: list[str]) -> None:
 
     print(f"Recordings successfully processed: {len(global_entrylist)} total entries | {len(files)} files ({db_count} in cache, {len(files) - db_count} new) and {len(deleted)} deleted after mastering", file=sys.stderr)
 
+def process_downloads(files: list[str]) -> None:
+    print("Processing downloads... (This may take a while)", file=sys.stderr)
+
+    all_downloads = DownloadFactory.from_database_all()
+
+    db_count = 0
+    for i, f in enumerate(files):
+        print(f"Processing downloads {i + 1} of {len(files)}", end="\r", file=sys.stderr)
+        basepath, file_extension = os.path.splitext(f)
+        basename = os.path.basename(basepath)
+        match = [d for d in all_downloads if d.file_basename == basename]
+        assert len(match) <= 1
+        if len(match) == 1:
+            global_entrylist.append(match[0])
+            db_count += 1
+            continue
+
+        dl = DownloadFactory.from_video_file(basepath, file_extension)
+        db_save_dl(dl)
+        global_entrylist.append(dl)
+
+    print(f"Downloads successfully processed: {len(global_entrylist)} total entries | {len(files)} files ({db_count} in cache, {len(files) - db_count} new) ", file=sys.stderr)
 
 def main() -> None:
     db_init()
@@ -603,6 +685,7 @@ def main() -> None:
 
     # Crawl directory tree for recordings, search cache, add them to the list
     process_recordings(scan_directories(config["rec_paths"], [E2_VIDEO_EXTENSION]))
+    process_downloads(scan_directories(config["dl_paths"], [".mp4"]))
 
     radios_metadata = (("groupkey", QueryType.ATTRIBUTE), SortOrder.ASC)
     sort_global_entrylist(radios_metadata[0][0], radios_metadata[0][1], radios_metadata[1])
