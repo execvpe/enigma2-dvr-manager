@@ -694,9 +694,9 @@ def main() -> None:
     gui_init()
 
     while True:
-        selected_recodings = [r for r in global_entrylist if r.is_dropped]
-        good_recodings = [r for r in global_entrylist if r.is_good]
-        mastered_recodings = [r for r in global_entrylist if r.is_mastered]
+        selected_recodings = [r for r in global_entrylist if (isinstance(r, Recording) and r.is_dropped)]
+        good_recodings = [r for r in global_entrylist if (isinstance(r, Recording) and r.is_good)]
+        mastered_recodings = [r for r in global_entrylist if (isinstance(r, Recording) and r.is_mastered)]
 
         radios_metadata = tuple(r.metadata for r in window.element_list() if isinstance(r, sg.Radio) and r.get())
         if isinstance(radios_metadata[0], SortOrder):
