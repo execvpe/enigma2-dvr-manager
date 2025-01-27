@@ -227,7 +227,7 @@ def drop_recording(rec: Recording) -> None:
             filepath = rec.basepath + e
             if os.path.exists(filepath):
                 print(filepath, file=f)
-    db_remove(rec)
+    db_remove_rec(rec)
 
 def sort_global_entrylist(order_by: str, query_type: QueryType, sort_order: SortOrder) -> None:
     key_ranks = db_rank(order_by, query_type, sort_order)
@@ -248,7 +248,7 @@ def update_attribute(recordings: list[Recording],
         assert isinstance(r, Recording)
         if check(r):
             update(r)
-            db_save(r)
+            db_save_rec(r)
             i = global_entrylist.index(r)
             window["recordingBox"].widget.delete(i)
             window["recordingBox"].widget.insert(i, r)
@@ -504,9 +504,9 @@ def db_rank(order_by: str, query_type: QueryType, sort_order: SortOrder) -> dict
 
     return dict(c.fetchall())
 
-def db_save(rec: Recording) -> None:
+def db_save_rec(rec: Recording) -> None:
     assert isinstance(rec, Recording)
-    db_remove(rec)
+    db_remove_rec(rec)
     c = database.cursor()
     c.execute("""
               INSERT INTO recordings(file_basename, file_size,
@@ -527,7 +527,7 @@ def db_save(rec: Recording) -> None:
 
     database.commit()
 
-def db_remove(rec: Recording) -> None:
+def db_remove_rec(rec: Recording) -> None:
     assert isinstance(rec, Recording)
     c = database.cursor()
     c.execute("""
