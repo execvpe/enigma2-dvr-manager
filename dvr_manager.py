@@ -8,11 +8,10 @@ import string
 import subprocess
 import sys
 
-from datetime import datetime, timedelta
-from enum     import Enum
-
 from collections.abc import Callable
-from typing import Iterator, Optional
+from datetime        import datetime, timedelta
+from enum            import Enum
+from typing          import Iterator, Optional
 
 import cv2
 import FreeSimpleGUI as sg
@@ -20,11 +19,11 @@ import FreeSimpleGUI as sg
 # Enigma 2 video file extension (default: ".ts")
 E2_VIDEO_EXTENSION = ".ts"
 # Enigma 2 meta file extension (default: ".ts.meta")
-E2_META_EXTENSION = ".ts.meta"
+E2_META_EXTENSION  = ".ts.meta"
 # Enigma 2 eit file extension (default: ".eit")
-E2_EIT_EXTENSION = ".eit"
+E2_EIT_EXTENSION   = ".eit"
 # As far as I know there are six files associated to each recording
-E2_EXTENSIONS = [".eit", ".ts", ".ts.ap", ".ts.cuts", ".ts.meta", ".ts.sc"]
+E2_EXTENSIONS      = [".eit", ".ts", ".ts.ap", ".ts.cuts", ".ts.meta", ".ts.sc"]
 
 # Download file name pattern
 DL_REGEX_PATTERN = re.compile(r"^(.*?) \((\d{4})\) \[(.*?=.*?)\] - (.*?)$")
@@ -55,20 +54,25 @@ class Entry:
 
 class Recording(Entry):
     basepath: Optional[str]
+
     file_basename: str
-    file_size: int
-    epg_channel: str
-    epg_title: str
+    file_size:     int
+
+    epg_channel:     str
+    epg_title:       str
     epg_description: str
+
     video_duration: int
-    video_height: int
-    video_width: int
-    video_fps: int
-    is_good: bool
-    is_dropped: bool
+    video_height:   int
+    video_width:    int
+    video_fps:      int
+
+    is_good:     bool
+    is_dropped:  bool
     is_mastered: bool
-    groupkey: str
-    comment: str
+
+    groupkey:  str
+    comment:   str
     timestamp: str
 
     def hd(self) -> bool:
@@ -96,18 +100,22 @@ class Recording(Entry):
 
 class Download(Entry):
     basepath: Optional[str]
-    file_basename: str
+
+    file_basename:  str
     file_extension: str
-    file_size: int
-    dl_source: str
-    dl_title: str
+    file_size:      int
+
+    dl_source:      str
+    dl_title:       str
     dl_description: str
+
     video_duration: int
-    video_height: int
-    video_width: int
-    video_fps: int
+    video_height:   int
+    video_width:    int
+    video_fps:      int
+
     groupkey: str
-    comment: str
+    comment:  str
 
     def hd(self) -> bool:
         return self.video_height >= 720
@@ -126,13 +134,6 @@ class Download(Entry):
     def __repr__(self) -> str:
         return f"{self.__attributes()} | {fit_string(self.dl_source, 24, 2).ljust(24)} | {(to_GiB(self.file_size)):4.1f} GiB | {(self.video_duration // 60):3d}' |        --- | {fit_string(self.dl_title, 45, 7).ljust(45)} | {self.dl_description}"
 
-# Global entry list
-global_entrylist: list[Entry] = []
-# FreeSimpleGUI window object
-window: sg.Window
-# Recording cache database
-database = sqlite3.connect("database.sqlite3")
-
 class RecordingFactory:
     @staticmethod
     def from_meta_file(basepath: str, meta_file_extension: str) -> Recording:
@@ -147,11 +148,17 @@ class RecordingFactory:
 
         rec.basepath = basepath
 
-        rec.file_basename, rec.file_size = os.path.basename(basepath), os.stat(basepath + E2_VIDEO_EXTENSION).st_size
-        rec.epg_channel, rec.epg_title = meta[0].split(":")[-1].strip(), meta[1].strip()
+        rec.file_basename = os.path.basename(basepath)
+        rec.file_size     = os.stat(basepath + E2_VIDEO_EXTENSION).st_size
+
+        rec.epg_channel     = meta[0].split(":")[-1].strip()
+        rec.epg_title       = meta[1].strip()
         rec.epg_description = remove_prefix(meta[2].strip(), rec.epg_title).strip()
+
         rec.video_duration, rec.video_height, rec.video_width, rec.video_fps = get_video_metadata(rec)
+
         rec.is_good, rec.is_dropped, rec.is_mastered = False, False, False
+
         rec.comment = ""
 
         basename_tokens = rec.file_basename.split(" - ")
@@ -165,7 +172,7 @@ class RecordingFactory:
         if len(rec.epg_title) == 0:
             rec.epg_title = basename_tokens[2]
 
-        rec.groupkey  = make_groupkey(rec.epg_title)
+        rec.groupkey = make_groupkey(rec.epg_title)
 
         return rec
 
@@ -200,15 +207,19 @@ class DownloadFactory:
 
         dl.basepath = basepath
 
-        dl.file_basename, dl.file_extension = os.path.basename(basepath), video_file_extension
+        dl.file_basename  = os.path.basename(basepath)
+        dl.file_extension = video_file_extension
 
         assert (match := DL_REGEX_PATTERN.match(dl.file_basename))
 
         dl.file_size = os.stat(basepath + dl.file_extension).st_size
 
-        dl.dl_source, dl.dl_title = match.group(4), match.group(1)
+        dl.dl_source      = match.group(4)
+        dl.dl_title       = match.group(1)
         dl.dl_description = f"{match.group(2)} ({match.group(3)})"
+
         dl.video_duration, dl.video_height, dl.video_width, dl.video_fps = get_video_metadata(dl)
+
         dl.comment = ""
 
         dl.groupkey = make_groupkey(dl.dl_title)
@@ -220,6 +231,13 @@ class DownloadFactory:
         if (all_downloads := db_load_dl_all()) is None:
             return []
         return all_downloads
+
+# Global entry list
+global_entrylist: list[Entry] = []
+# FreeSimpleGUI window object
+window: sg.Window
+# Recording cache database
+database = sqlite3.connect("database.sqlite3")
 
 # Remove everything that is not a letter or digit
 def make_groupkey(line: str) -> str:
@@ -394,10 +412,10 @@ def gui_init() -> None:
                        resizable=True,
                        finalize=True)
 
-    window["recordingBox"].set_focus()
+    window["recordingBox"]       .set_focus()
     window["recordingBox"].widget.config(fg="white", bg="black")
-    window["commentMul"].widget.config(fg="white", bg="black")
-    window["findInput"].widget.config(fg="white", bg="black")
+    window["commentMul"]  .widget.config(fg="white", bg="black")
+    window["findInput"]   .widget.config(fg="white", bg="black")
 
 def gui_find(find_string: str) -> int:
     matches = []
@@ -463,10 +481,14 @@ def db_init() -> None:
 def db_load_rec(basename: str) -> Optional[Recording]:
     c = database.cursor()
     c.execute("""
-              SELECT file_basename, file_size,
-                epg_channel, epg_title, epg_description,
-                video_duration, video_height, video_width, video_fps,
-                is_good, is_dropped, is_mastered, groupkey, comment, timestamp
+              SELECT file_basename,
+                     file_size,
+                     epg_channel, epg_title, epg_description,
+                     video_duration, video_height, video_width, video_fps,
+                     is_good, is_dropped, is_mastered,
+                     groupkey,
+                     comment,
+                     timestamp
               FROM recordings
               WHERE file_basename = ?;
               """, (basename, ))
@@ -475,11 +497,16 @@ def db_load_rec(basename: str) -> Optional[Recording]:
         return None
 
     rec = Recording()
-    rec.file_basename, rec.file_size = raw[0], int(raw[1])
-    rec.epg_channel, rec.epg_title, rec.epg_description = raw[2], raw[3], raw[4]
-    rec.video_duration, rec.video_height, rec.video_width, rec.video_fps = raw[5], raw[6], raw[7], raw[8]
-    rec.is_good, rec.is_dropped, rec.is_mastered = bool(raw[9]), raw[10], bool(raw[11])
-    rec.groupkey, rec.comment = raw[12], raw[13]
+
+    rec.file_basename = raw[0]
+    rec.file_size     = raw[1]
+
+    rec.epg_channel,    rec.epg_title,    rec.epg_description               = raw[2], raw[3],  raw[4]
+    rec.video_duration, rec.video_height, rec.video_width,    rec.video_fps = raw[5], raw[6],  raw[7], raw[8]
+    rec.is_good,        rec.is_dropped,   rec.is_mastered                   = raw[9], raw[10], raw[11]
+
+    rec.groupkey  = raw[12]
+    rec.comment   = raw[13]
     rec.timestamp = raw[14]
 
     return rec
@@ -488,9 +515,11 @@ def db_load_dl_all() -> Optional[list[Download]]:
     c = database.cursor()
     c.execute("""
               SELECT file_basename,
-                dl_source, dl_title, dl_description,
-                video_duration, video_height, video_width, video_fps,
-                groupkey, comment, file_size
+                     dl_source, dl_title, dl_description,
+                     video_duration, video_height, video_width, video_fps,
+                     groupkey,
+                     comment,
+                     file_size
               FROM downloads;
               """)
 
@@ -500,10 +529,15 @@ def db_load_dl_all() -> Optional[list[Download]]:
     all_downloads = []
     for raw in all_raw:
         dl = Download()
+
         dl.file_basename = raw[0]
-        dl.dl_source, dl.dl_title, dl.dl_description = raw[1], raw[2], raw[3]
-        dl.video_duration, dl.video_height, dl.video_width, dl.video_fps = raw[4], raw[5], raw[6], raw[7]
-        dl.groupkey, dl.comment, dl.file_size = raw[8], raw[9], raw[10]
+
+        dl.dl_source,      dl.dl_title,     dl.dl_description              = raw[1], raw[2], raw[3]
+        dl.video_duration, dl.video_height, dl.video_width,   dl.video_fps = raw[4], raw[5], raw[6], raw[7]
+
+        dl.groupkey  = raw[8]
+        dl.comment   = raw[9]
+        dl.file_size = raw[10]
 
         all_downloads.append(dl)
 
@@ -512,10 +546,14 @@ def db_load_dl_all() -> Optional[list[Download]]:
 def db_load_rec_mastered_all() -> Optional[list[Recording]]:
     c = database.cursor()
     c.execute("""
-              SELECT file_basename, file_size,
-                epg_channel, epg_title, epg_description,
-                video_duration, video_height, video_width, video_fps,
-                is_good, is_dropped, is_mastered, groupkey, comment, timestamp
+              SELECT file_basename,
+                     file_size,
+                     epg_channel, epg_title, epg_description,
+                     video_duration, video_height, video_width, video_fps,
+                     is_good, is_dropped, is_mastered,
+                     groupkey,
+                     comment,
+                     timestamp
               FROM recordings
               WHERE is_mastered = TRUE;
               """)
@@ -525,12 +563,18 @@ def db_load_rec_mastered_all() -> Optional[list[Recording]]:
 
     all_mastered = []
     for raw in all_raw:
+
         rec = Recording()
-        rec.file_basename, rec.file_size = raw[0], int(raw[1])
-        rec.epg_channel, rec.epg_title, rec.epg_description = raw[2], raw[3], raw[4]
-        rec.video_duration, rec.video_height, rec.video_width, rec.video_fps = raw[5], raw[6], raw[7], raw[8]
-        rec.is_good, rec.is_dropped, rec.is_mastered = bool(raw[9]), raw[10], bool(raw[11])
-        rec.groupkey, rec.comment = raw[12], raw[13]
+
+        rec.file_basename = raw[0]
+        rec.file_size     = raw[1]
+
+        rec.epg_channel,    rec.epg_title,    rec.epg_description               = raw[2], raw[3],  raw[4]
+        rec.video_duration, rec.video_height, rec.video_width,    rec.video_fps = raw[5], raw[6],  raw[7], raw[8]
+        rec.is_good,        rec.is_dropped  , rec.is_mastered                   = raw[9], raw[10], raw[11]
+
+        rec.groupkey  = raw[12]
+        rec.comment   = raw[13]
         rec.timestamp = raw[14]
 
         all_mastered.append(rec)
@@ -697,7 +741,7 @@ def main() -> None:
 
     while True:
         selected_recodings = [r for r in global_entrylist if (isinstance(r, Recording) and r.is_dropped)]
-        good_recodings = [r for r in global_entrylist if (isinstance(r, Recording) and r.is_good)]
+        good_recodings     = [r for r in global_entrylist if (isinstance(r, Recording) and r.is_good)]
         mastered_recodings = [r for r in global_entrylist if (isinstance(r, Recording) and r.is_mastered)]
 
         radios_metadata = tuple(r.metadata for r in window.element_list() if isinstance(r, sg.Radio) and r.get())
@@ -725,18 +769,18 @@ def main() -> None:
 
         if len(recordingBox_selected_rec) > 0:
             r = recordingBox_selected_rec[0]
-            window["metaText"].update(f"{r.video_width:4d}x{r.video_height:4d} @ {r.video_fps} fps")
+            window["metaText"]     .update(f"{r.video_width:4d}x{r.video_height:4d} @ {r.video_fps} fps")
             window["selectionText"].update(f"{len(recordingBox_selected_rec)} entries under cursor")
-            window["commentMul"].update(recordingBox_selected_rec[0].comment)
+            window["commentMul"]   .update(recordingBox_selected_rec[0].comment)
 
         # [C]omment
         if ((event == "c:54" and len(recordingBox_selected_rec) == 1)
         or ( event == "C:54" and len(recordingBox_selected_rec) >  0)):
             window["recordingBox"].update(disabled=True)
-            window["dropButton"].update(disabled=True)
-            window["metaText"].update("COMMENT Mode | Submit: [ESC]")
-            window["commentMul"].update(disabled=False)
-            window["commentMul"].set_focus()
+            window["dropButton"]  .update(disabled=True)
+            window["metaText"]    .update("COMMENT Mode | Submit: [ESC]")
+            window["commentMul"]  .update(disabled=False)
+            window["commentMul"]  .set_focus()
 
             while True:
                 event, _ = window.read()
@@ -750,9 +794,9 @@ def main() -> None:
                 comment = window["commentMul"].get()
                 break
 
-            window["commentMul"].update(disabled=True)
-            window["dropButton"].update(disabled=False)
-            window["metaText"].update("SELECT Mode")
+            window["commentMul"]  .update(disabled=True)
+            window["dropButton"]  .update(disabled=False)
+            window["metaText"]    .update("SELECT Mode")
             window["recordingBox"].update(disabled=False)
             update_attribute(recordingBox_selected_rec,
                              lambda r: True,
@@ -763,10 +807,10 @@ def main() -> None:
         # [F]ind
         if event == "f:41":
             window["recordingBox"].update(disabled=True)
-            window["dropButton"].update(disabled=True)
-            window["metaText"].update("FIND Mode | Submit: [ESC]")
-            window["findInput"].update("", disabled=False)
-            window["findInput"].set_focus()
+            window["dropButton"]  .update(disabled=True)
+            window["metaText"]    .update("FIND Mode | Submit: [ESC]")
+            window["findInput"]   .update("", disabled=False)
+            window["findInput"]   .set_focus()
 
             while True:
                 event, _ = window.read()
@@ -780,9 +824,9 @@ def main() -> None:
                 if event == "Escape:9":
                     break
 
-            window["findInput"].update(disabled=True)
-            window["dropButton"].update(disabled=False)
-            window["metaText"].update("SELECT Mode")
+            window["findInput"]   .update(disabled=True)
+            window["dropButton"]  .update(disabled=False)
+            window["metaText"]    .update("SELECT Mode")
             window["recordingBox"].update(disabled=False)
             window["recordingBox"].set_focus()
             continue
