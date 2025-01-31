@@ -308,20 +308,26 @@ def sort_global_entrylist(order_by: str, sort_order: SortOrder) -> None:
     global_entrylist.sort(key=lambdas[order_by],
                           reverse=(sort_order == SortOrder.DESC))
 
-def update_attribute(recordings: list[Recording],
-                     check: Callable[[Recording], bool],
-                     update: Callable[[Recording], None]) -> None:
-    if len(recordings) == 0:
+def update_attribute(entries: list[Entry],
+                     check: Callable[[Entry], bool],
+                     update: Callable[[Entry], None]) -> None:
+    if len(entries) == 0:
         return
-    for r in recordings:
-        assert isinstance(r, Recording)
-        if check(r):
-            update(r)
-            db_save_rec(r)
-            i = global_entrylist.index(r)
+    for e in entries:
+        if check(e):
+            update(e)
+
+            if isinstance(e, Recording):
+                db_save_rec(e)
+            else:
+                db_save_dl(e)
+
+            i = global_entrylist.index(e)
+
             window["recordingBox"].widget.delete(i)
-            window["recordingBox"].widget.insert(i, r)
-    gui_reselect(recordings)
+            window["recordingBox"].widget.insert(i, e)
+
+    gui_reselect(entries)
 
 def get_video_metadata(entry: Entry) -> tuple[int, int, int, int]:
     assert entry.basepath is not None
@@ -836,6 +842,8 @@ def main() -> None:
 
         # [I]nformation from EIT entry
         if event == "i:31" and len(recordingBox_selected_rec) == 1:
+            if (isinstance(recordingBox_selected_rec[0], Download)):
+                continue
             sg.popup(get_eit_data(recordingBox_selected_rec[0]),
                      title=f"EIT - {recordingBox_selected_rec[0].epg_title}",
                      font=GUI_FONT,
@@ -846,17 +854,24 @@ def main() -> None:
         # [O]pen recording using VLC
         if event == "o:32" and len(recordingBox_selected_rec) > 0:
             if (bp := recordingBox_selected_rec[0].basepath) is not None:
-                subprocess.Popen(["/usr/bin/env", "vlc", bp + E2_VIDEO_EXTENSION])
+                if isinstance(recordingBox_selected_rec[0], Recording):
+                    subprocess.Popen(["vlc", bp + E2_VIDEO_EXTENSION])
+                else:
+                    subprocess.Popen(["vlc", bp + recordingBox_selected_rec[0].file_extension])
             continue
 
         # Select for [D]rop
         if event == "d:40":
+            if (isinstance(recordingBox_selected_rec[0], Download)):
+                continue
             update_attribute(recordingBox_selected_rec,
                              lambda r: not r.is_mastered,
                              lambda r: setattr(r, "is_dropped", True))
             continue
 
         if event == "D:40":
+            if (isinstance(recordingBox_selected_rec[0], Download)):
+                continue
             update_attribute(recordingBox_selected_rec,
                              lambda r: r.is_dropped ,
                              lambda r: setattr(r, "is_dropped", False))
@@ -864,12 +879,16 @@ def main() -> None:
 
         # Mark recording as [G]ood
         if event == "g:42":
+            if (isinstance(recordingBox_selected_rec[0], Download)):
+                continue
             update_attribute(recordingBox_selected_rec,
                              lambda r: not r.is_good,
                              lambda r: setattr(r, "is_good", True))
             continue
 
         if event == "G:42":
+            if (isinstance(recordingBox_selected_rec[0], Download)):
+                continue
             update_attribute(recordingBox_selected_rec,
                              lambda r: r.is_good,
                              lambda r: setattr(r, "is_good", False))
@@ -877,12 +896,16 @@ def main() -> None:
 
         # Mark recording as [M]astered
         if event == "m:58":
+            if (isinstance(recordingBox_selected_rec[0], Download)):
+                continue
             update_attribute(recordingBox_selected_rec,
                              lambda r: not r.is_dropped,
                              lambda r: setattr(r, "is_mastered", True))
             continue
 
         if event == "M:58":
+            if (isinstance(recordingBox_selected_rec[0], Download)):
+                continue
             update_attribute(recordingBox_selected_rec,
                              lambda r: r.is_mastered,
                              lambda r: setattr(r, "is_mastered", False))
