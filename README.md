@@ -72,7 +72,7 @@ following file name structure:
 ```
 Timestamp       Channel     Recording title
 
-20230219 0230 - TELE 5 HD - Why Don't You Just Die!.eit       (required, additional EIT information)
+20230219 0230 - TELE 5 HD - Why Don't You Just Die!.eit       (required, more metadata)
 20230219 0230 - TELE 5 HD - Why Don't You Just Die!.ts        (required, the main video file)
 20230219 0230 - TELE 5 HD - Why Don't You Just Die!.ts.ap     (optional)
 20230219 0230 - TELE 5 HD - Why Don't You Just Die!.ts.cuts   (optional)
@@ -107,8 +107,8 @@ There is currently no option to add or manage loaded directories via the GUI.
 | Keyboard Shortcut | Explanation |
 | :---------------: | :---------: |
 | F         | Find entries based on their title |
-| I         | Show a dialog box containing extended information from the EIT entry |
-| O         | Open the first of the selected entry in VLC |
+| I         | Show a dialog box containing extended information from the EIT (Event Information Table) |
+| O         | Open the first selected entry in VLC |
 | C         | Add or change the comment of one selected recording |
 | Shift + C | Add or change the comment of the first recording and **overwrite the comments of all recordings under the cursor** with this one |
 | D         | Select all recordings under the cursor for drop / Apply the D attribute to the selected recordings |
