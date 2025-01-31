@@ -713,6 +713,9 @@ def process_downloads(files: list[str]) -> None:
         match = [d for d in all_downloads if d.file_basename == basename]
         assert len(match) <= 1
         if len(match) == 1:
+            match[0].basepath       = basepath
+            match[0].file_extension = file_extension
+
             global_entrylist.append(match[0])
             db_count += 1
             continue
