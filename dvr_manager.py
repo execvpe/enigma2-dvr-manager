@@ -690,7 +690,7 @@ def process_recordings(files: list[str]) -> None:
     deleted = [rec for rec in RecordingFactory.from_database_mastered_all() if rec not in global_entrylist]
     global_entrylist.extend(deleted)
 
-    print(f"Recordings successfully processed: {len(global_entrylist)} total entries | {len(files)} files ({db_count} in cache, {len(files) - db_count} new) and {len(deleted)} deleted after mastering", file=sys.stderr)
+    print(f"Recordings successfully processed: {len(files)} recording files ({db_count} in cache, {len(files) - db_count} new) and {len(deleted)} deleted after mastering", file=sys.stderr)
 
 def process_downloads(files: list[str]) -> None:
     print("Processing downloads... (This may take a while)", file=sys.stderr)
@@ -716,7 +716,7 @@ def process_downloads(files: list[str]) -> None:
         db_save_dl(dl)
         global_entrylist.append(dl)
 
-    print(f"Downloads successfully processed: {len(global_entrylist)} total entries | {len(files)} files ({db_count} in cache, {len(files) - db_count} new) ", file=sys.stderr)
+    print(f"Downloads successfully processed: {len(files)} download files ({db_count} in cache, {len(files) - db_count} new) ", file=sys.stderr)
 
 def main() -> None:
     db_init()
@@ -727,6 +727,7 @@ def main() -> None:
     # Crawl directory tree for recordings, search cache, add them to the list
     process_recordings(scan_directories(config["rec_paths"], [E2_VIDEO_EXTENSION]))
     process_downloads(scan_directories(config["dl_paths"], [".mp4"]))
+    print(f"{len(global_entrylist)} total entries", file=sys.stderr)
 
     radios_metadata = ("title", SortOrder.ASC)
     sort_global_entrylist(*radios_metadata)
