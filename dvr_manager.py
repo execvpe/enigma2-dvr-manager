@@ -113,7 +113,7 @@ class Download(Entry):
         return self.video_height >= 720
 
     def __attributes(self) -> str:
-        return f"   {'C' if len(self.comment) > 0 else '.'}"
+        return f" GM{'C' if len(self.comment) > 0 else '.'}"
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Download):
@@ -124,7 +124,7 @@ class Download(Entry):
         return self.file_basename.__hash__()
 
     def __repr__(self) -> str:
-        return f"{self.__attributes()} | {fit_string(self.dl_source, 24, 2).ljust(24)} |      --- | {(self.video_duration // 60):3d}' |        --- | {fit_string(self.dl_title, 45, 7).ljust(45)} | {self.dl_description}"
+        return f"{self.__attributes()} | {fit_string(self.dl_source, 24, 2).ljust(24)} | {(to_GiB(self.file_size)):4.1f} GiB | {(self.video_duration // 60):3d}' |        --- | {fit_string(self.dl_title, 45, 7).ljust(45)} | {self.dl_description}"
 
 # Global entry list
 global_entrylist: list[Entry] = []
@@ -412,7 +412,8 @@ def gui_find(find_string: str) -> int:
 
 def gui_recolor(window: sg.Window) -> None:
     for i, e in enumerate(global_entrylist):
-        if not isinstance(e, Recording):
+        if isinstance(e, Download):
+            window["recordingBox"].widget.itemconfig(i, fg="black", bg="yellow")
             continue
 
         if e.is_dropped:
