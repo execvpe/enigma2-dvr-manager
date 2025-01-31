@@ -490,7 +490,7 @@ def db_load_dl_all() -> Optional[list[Download]]:
               SELECT file_basename,
                 dl_source, dl_title, dl_description,
                 video_duration, video_height, video_width, video_fps,
-                groupkey, comment
+                groupkey, comment, file_size
               FROM downloads;
               """)
 
@@ -503,7 +503,7 @@ def db_load_dl_all() -> Optional[list[Download]]:
         dl.file_basename = raw[0]
         dl.dl_source, dl.dl_title, dl.dl_description = raw[1], raw[2], raw[3]
         dl.video_duration, dl.video_height, dl.video_width, dl.video_fps = raw[4], raw[5], raw[6], raw[7]
-        dl.groupkey, dl.comment = raw[8], raw[9]
+        dl.groupkey, dl.comment, dl.file_size = raw[8], raw[9], raw[10]
 
         all_downloads.append(dl)
 
