@@ -844,11 +844,11 @@ def main() -> None:
         # Drop button pressed
         if event == "dropButton":
             for_deletion = set()
-            for r in [x for x in global_entrylist if x.is_dropped]:
-                drop_recording(r)
-                for_deletion.add(r)
-            for r in for_deletion:
-                global_entrylist.remove(r)
+            for e in [x for x in global_entrylist if isinstance(x, Recording) and x.is_dropped]:
+                drop_recording(e)
+                for_deletion.add(e)
+            for e in for_deletion:
+                global_entrylist.remove(e)
             window["recordingBox"].update(global_entrylist)
 
 if __name__ == "__main__":
