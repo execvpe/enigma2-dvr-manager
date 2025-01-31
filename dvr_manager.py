@@ -43,11 +43,6 @@ GROUPKEY_TRANSLATIONS = str.maketrans({
     "ß": "ss"
 })
 
-
-class QueryType(Enum):
-    ATTRIBUTE = 0
-    AGGREGATE = 1
-
 class SortOrder(Enum):
     ASC = 0
     DESC = 1
@@ -73,7 +68,6 @@ class Recording(Entry):
     is_dropped: bool
     is_mastered: bool
     groupkey: str
-    sortkey: int
     comment: str
     timestamp: str
 
@@ -113,7 +107,6 @@ class Download(Entry):
     video_width: int
     video_fps: int
     groupkey: str
-    sortkey: int
     comment: str
 
     def hd(self) -> bool:
@@ -255,15 +248,47 @@ def drop_recording(rec: Recording) -> None:
                 print(filepath, file=f)
     db_remove_rec(rec)
 
-def sort_global_entrylist(order_by: str, query_type: QueryType, sort_order: SortOrder) -> None:
-    key_ranks = db_rank(order_by, query_type, sort_order)
-    if query_type == QueryType.ATTRIBUTE:
-        for e in global_entrylist:
-                e.sortkey = key_ranks.get(e.file_basename, 0)
-    if query_type == QueryType.AGGREGATE:
-        for r in global_entrylist:
-            r.sortkey = key_ranks.get(r.groupkey, 0)
-    global_entrylist.sort(key=lambda r: r.sortkey)
+def sort_global_entrylist(order_by: str, sort_order: SortOrder) -> None:
+    groupkey_aggregates = {}
+
+    for e in global_entrylist:
+        meta = groupkey_aggregates.get(e.groupkey, {})
+
+        meta["max_size"] = max(meta.get("max_size", 0),  e.file_size)
+        meta["sum_size"] =     meta.get("sum_size", 0) + e.file_size
+        meta["count"]    =     meta.get("count",    0) + 1
+
+        if isinstance(e, Recording):
+            meta["any_drop"]     = meta.get("any_drop",     False) or e.is_dropped
+            meta["any_good"]     = meta.get("any_good",     False) or e.is_good
+            meta["any_mastered"] = meta.get("any_mastered", False) or e.is_mastered
+
+        groupkey_aggregates[e.groupkey] = meta
+
+    lambdas = {
+        "title":         lambda e:  e.groupkey,
+        "channel":       lambda e: (e.epg_channel          if isinstance(e, Recording) else e.dl_source, e.groupkey),
+        "date":          lambda e: (e.timestamp            if isinstance(e, Recording) else "",          e.groupkey),
+        "time":          lambda e: (e.timestamp.split()[1] if isinstance(e, Recording) else "",          e.groupkey),
+        "attr_good":     lambda e: (not (e.is_good         if isinstance(e, Recording) else True),       e.groupkey),
+        "attr_mastered": lambda e: (not (e.is_mastered     if isinstance(e, Recording) else True),       e.groupkey),
+        "attr_dropped":  lambda e: (not (e.is_dropped      if isinstance(e, Recording) else False),      e.groupkey),
+        "duration":      lambda e: (e.video_duration,                                                    e.groupkey),
+        "resolution":    lambda e: (e.video_height,                                                      e.groupkey),
+        "size":          lambda e: (e.file_size,                                                         e.groupkey),
+
+        "max_size":      lambda e: (groupkey_aggregates[e.groupkey]["max_size"],                                            e.groupkey),
+        "sum_size":      lambda e: (groupkey_aggregates[e.groupkey]["sum_size"],                                            e.groupkey),
+        "avg_size":      lambda e: (groupkey_aggregates[e.groupkey]["sum_size"] / groupkey_aggregates[e.groupkey]["count"], e.groupkey),
+        "count":         lambda e: (groupkey_aggregates[e.groupkey]["count"],                                               e.groupkey),
+
+        "any_drop":      lambda e: (not groupkey_aggregates[e.groupkey].get("any_drop",     False), e.groupkey),
+        "any_good":      lambda e: (not groupkey_aggregates[e.groupkey].get("any_good",     False), e.groupkey),
+        "any_mastered":  lambda e: (not groupkey_aggregates[e.groupkey].get("any_mastered", False), e.groupkey),
+    }
+
+    global_entrylist.sort(key=lambdas[order_by],
+                          reverse=(sort_order == SortOrder.DESC))
 
 def update_attribute(recordings: list[Recording],
                      check: Callable[[Recording], bool],
@@ -318,23 +343,23 @@ def gui_init() -> None:
                                font=GUI_FONT, text_color="grey")],
                               [sg.HorizontalSeparator(color="green")],
                               [sg.Text("Order by", font=GUI_FONT, text_color="grey"), sg.Column([
-                              [sg.Radio("Title", "sortRadio", font=GUI_FONT, enable_events=True, default=True, metadata=("groupkey", QueryType.ATTRIBUTE)),
-                               sg.Radio("Channel", "sortRadio", font=GUI_FONT, enable_events=True, metadata=("epg_channel", QueryType.ATTRIBUTE)),
-                               sg.Radio("Date", "sortRadio", font=GUI_FONT, enable_events=True, metadata=("timestamp", QueryType.ATTRIBUTE)),
-                               sg.Radio("Time", "sortRadio", font=GUI_FONT, enable_events=True, metadata=("TIME(timestamp)", QueryType.ATTRIBUTE)),
-                               sg.Radio("Size", "sortRadio", font=GUI_FONT, enable_events=True, metadata=("file_size", QueryType.ATTRIBUTE)),
-                               sg.Radio("Duration", "sortRadio", font=GUI_FONT, enable_events=True, metadata=("video_duration", QueryType.ATTRIBUTE)),
-                               sg.Radio("drop", "sortRadio", font=GUI_FONT, enable_events=True, metadata=("is_dropped", QueryType.ATTRIBUTE)),
-                               sg.Radio("good", "sortRadio", font=GUI_FONT, enable_events=True, metadata=("is_good", QueryType.ATTRIBUTE)),
-                               sg.Radio("mastered", "sortRadio", font=GUI_FONT, enable_events=True, metadata=("is_mastered", QueryType.ATTRIBUTE)),
-                               sg.Radio("COUNT", "sortRadio", font=GUI_FONT, enable_events=True, metadata=("COUNT(*)", QueryType.AGGREGATE)),],
-                              [sg.Radio("AVG(size)", "sortRadio", font=GUI_FONT, enable_events=True, metadata=("AVG(file_size)", QueryType.AGGREGATE)),
-                               sg.Radio("MAX(size)", "sortRadio", font=GUI_FONT, enable_events=True, metadata=("MAX(file_size)", QueryType.AGGREGATE)),
-                               sg.Radio("SUM(size)", "sortRadio", font=GUI_FONT, enable_events=True, metadata=("SUM(file_size)", QueryType.AGGREGATE)),
-                               sg.Radio("ANY(drop)", "sortRadio", font=GUI_FONT, enable_events=True, metadata=("MAX(is_dropped)", QueryType.AGGREGATE)),
-                               sg.Radio("ANY(good)", "sortRadio", font=GUI_FONT, enable_events=True, metadata=("MAX(is_good)", QueryType.AGGREGATE)),
-                               sg.Radio("ANY(mastered)", "sortRadio", font=GUI_FONT, enable_events=True, metadata=("MAX(is_mastered)", QueryType.AGGREGATE)),
-                               sg.Radio("Resolution", "sortRadio", font=GUI_FONT, enable_events=True, metadata=("video_height", QueryType.ATTRIBUTE)),]]),
+                              [sg.Radio("Title", "sortRadio", font=GUI_FONT, enable_events=True, default=True, metadata="title"),
+                               sg.Radio("Channel", "sortRadio", font=GUI_FONT, enable_events=True, metadata="channel"),
+                               sg.Radio("Date", "sortRadio", font=GUI_FONT, enable_events=True, metadata="date"),
+                               sg.Radio("Time", "sortRadio", font=GUI_FONT, enable_events=True, metadata="time"),
+                               sg.Radio("Size", "sortRadio", font=GUI_FONT, enable_events=True, metadata="size"),
+                               sg.Radio("Duration", "sortRadio", font=GUI_FONT, enable_events=True, metadata="duration"),
+                               sg.Radio("drop", "sortRadio", font=GUI_FONT, enable_events=True, metadata="attr_dropped"),
+                               sg.Radio("good", "sortRadio", font=GUI_FONT, enable_events=True, metadata="attr_good"),
+                               sg.Radio("mastered", "sortRadio", font=GUI_FONT, enable_events=True, metadata="attr_mastered"),
+                               sg.Radio("COUNT", "sortRadio", font=GUI_FONT, enable_events=True, metadata="count"),],
+                              [sg.Radio("AVG(size)", "sortRadio", font=GUI_FONT, enable_events=True, metadata="avg_size"),
+                               sg.Radio("MAX(size)", "sortRadio", font=GUI_FONT, enable_events=True, metadata="max_size"),
+                               sg.Radio("SUM(size)", "sortRadio", font=GUI_FONT, enable_events=True, metadata="sum_size"),
+                               sg.Radio("ANY(drop)", "sortRadio", font=GUI_FONT, enable_events=True, metadata="any_drop"),
+                               sg.Radio("ANY(good)", "sortRadio", font=GUI_FONT, enable_events=True, metadata="any_good"),
+                               sg.Radio("ANY(mastered)", "sortRadio", font=GUI_FONT, enable_events=True, metadata="any_mastered"),
+                               sg.Radio("Resolution", "sortRadio", font=GUI_FONT, enable_events=True, metadata="resolution"),]]),
                                sg.Push(), sg.VerticalSeparator(color="green"), sg.Column([
                               [sg.Radio("ASC", "orderRadio", font=GUI_FONT, enable_events=True, default=True, metadata=SortOrder.ASC)],
                               [sg.Radio("DESC", "orderRadio", font=GUI_FONT, enable_events=True, metadata=SortOrder.DESC)]])],
@@ -511,30 +536,6 @@ def db_load_rec_mastered_all() -> Optional[list[Recording]]:
 
     return all_mastered
 
-def db_rank(order_by: str, query_type: QueryType, sort_order: SortOrder) -> dict[str, int]:
-    # Yes, the following database calls are vulnerable to SQL injections,
-    # but the tuple solution does not work here.
-    # Please let me know if you have a better solution...
-
-    c = database.cursor()
-    if query_type == QueryType.ATTRIBUTE:
-        c.execute(f"""
-                  SELECT file_basename,
-                         ROW_NUMBER() OVER (ORDER BY {order_by} {sort_order}, groupkey, timestamp)
-                  FROM recordings
-                  ORDER BY file_basename;
-                  """)
-    if query_type == QueryType.AGGREGATE:
-        c.execute(f"""
-                  SELECT groupkey,
-                         ROW_NUMBER() OVER (ORDER BY {order_by} {sort_order}, groupkey, timestamp)
-                  FROM recordings
-                  GROUP BY groupkey
-                  ORDER BY groupkey;
-                  """)
-
-    return dict(c.fetchall())
-
 def db_save_rec(rec: Recording) -> None:
     assert isinstance(rec, Recording)
     db_remove_rec(rec)
@@ -687,8 +688,8 @@ def main() -> None:
     process_recordings(scan_directories(config["rec_paths"], [E2_VIDEO_EXTENSION]))
     process_downloads(scan_directories(config["dl_paths"], [".mp4"]))
 
-    radios_metadata = (("groupkey", QueryType.ATTRIBUTE), SortOrder.ASC)
-    sort_global_entrylist(radios_metadata[0][0], radios_metadata[0][1], radios_metadata[1])
+    radios_metadata = ("title", SortOrder.ASC)
+    sort_global_entrylist(*radios_metadata)
     radios_metadata_previous = radios_metadata
 
     gui_init()
@@ -704,7 +705,7 @@ def main() -> None:
 
         if radios_metadata != radios_metadata_previous:
             recordingBox_selected_rec = window["recordingBox"].get()
-            sort_global_entrylist(radios_metadata[0][0], radios_metadata[0][1], radios_metadata[1])
+            sort_global_entrylist(*radios_metadata)
             window["recordingBox"].update(global_entrylist)
             if len(recordingBox_selected_rec) > 0:
                 gui_reselect(recordingBox_selected_rec)
