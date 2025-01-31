@@ -4,14 +4,13 @@ import json
 import os
 import re
 import sqlite3
-import string
 import subprocess
 import sys
 
 from collections.abc import Callable
 from datetime        import datetime, timedelta
 from enum            import Enum
-from typing          import Iterator, Optional
+from typing          import Optional, Union
 
 import cv2
 import FreeSimpleGUI as sg
@@ -50,29 +49,28 @@ class SortOrder(Enum):
         return super().__str__().strip(f"{self.__class__.__name__}.")
 
 class Entry:
-    pass
-
-class Recording(Entry):
     basepath: Optional[str]
 
     file_basename: str
     file_size:     int
-
-    epg_channel:     str
-    epg_title:       str
-    epg_description: str
 
     video_duration: int
     video_height:   int
     video_width:    int
     video_fps:      int
 
+    groupkey:  str
+    comment:   str
+
+class Recording(Entry):
+    epg_channel:     str
+    epg_title:       str
+    epg_description: str
+
     is_good:     bool
     is_dropped:  bool
     is_mastered: bool
 
-    groupkey:  str
-    comment:   str
     timestamp: str
 
     def hd(self) -> bool:
@@ -99,23 +97,11 @@ class Recording(Entry):
         return f"{self.__attributes()} | {self.timestamp} - {self.__endtime()} | {(to_GiB(self.file_size)):4.1f} GiB | {(self.video_duration // 60):3d}' | {fit_string(self.epg_channel, 10, 2).ljust(10)} | {fit_string(self.epg_title, 45, 7).ljust(45)} | {self.epg_description}"
 
 class Download(Entry):
-    basepath: Optional[str]
-
-    file_basename:  str
     file_extension: str
-    file_size:      int
 
     dl_source:      str
     dl_title:       str
     dl_description: str
-
-    video_duration: int
-    video_height:   int
-    video_width:    int
-    video_fps:      int
-
-    groupkey: str
-    comment:  str
 
     def hd(self) -> bool:
         return self.video_height >= 720
@@ -136,7 +122,7 @@ class Download(Entry):
 
 class RecordingFactory:
     @staticmethod
-    def from_meta_file(basepath: str, meta_file_extension: str) -> Recording:
+    def from_meta_file(basepath: str, meta_file_extension: str) -> Optional[Recording]:
         try:
             with open(basepath + meta_file_extension, "r", encoding="utf-8") as m:
                 meta = m.readlines()
@@ -267,7 +253,7 @@ def drop_recording(rec: Recording) -> None:
     db_remove_rec(rec)
 
 def sort_global_entrylist(order_by: str, sort_order: SortOrder) -> None:
-    groupkey_aggregates = {}
+    groupkey_aggregates: dict[str, dict[str, Union[int, bool]]] = {}
 
     for e in global_entrylist:
         meta = groupkey_aggregates.get(e.groupkey, {})
@@ -735,7 +721,7 @@ def process_downloads(files: list[str]) -> None:
 def main() -> None:
     db_init()
 
-    with open("config.json") as f:
+    with open("config.json", "r", encoding="utf-8") as f:
         config = json.load(f)
 
     # Crawl directory tree for recordings, search cache, add them to the list
@@ -855,6 +841,7 @@ def main() -> None:
         if event == "o:32" and len(recordingBox_selected_rec) > 0:
             if (bp := recordingBox_selected_rec[0].basepath) is not None:
                 if isinstance(recordingBox_selected_rec[0], Recording):
+                    # FIXME: Calls to Popen should be handled by "with ... as", but that makes the main thread block
                     subprocess.Popen(["vlc", bp + E2_VIDEO_EXTENSION])
                 else:
                     subprocess.Popen(["vlc", bp + recordingBox_selected_rec[0].file_extension])
